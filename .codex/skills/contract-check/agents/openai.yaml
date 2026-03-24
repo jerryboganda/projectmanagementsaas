@@ -1,0 +1,4 @@
+interface:
+  display_name: "PM SaaS Contract Check"
+  short_description: "Check shared types and mock-to-real contract drift"
+  default_prompt: "Use $contract-check to inspect the affected types and producer-consumer boundaries, identify contract drift, and summarize the required synchronized updates."

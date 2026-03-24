@@ -1,0 +1,4 @@
+interface:
+  display_name: "PM SaaS Repo Discovery"
+  short_description: "Map routes, ownership, chokepoints, and mock contracts"
+  default_prompt: "Use $repo-discovery to trace the affected routes and components, identify shared chokepoints, and summarize exact files and risks before implementation."

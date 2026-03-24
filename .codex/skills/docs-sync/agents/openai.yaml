@@ -1,0 +1,4 @@
+interface:
+  display_name: "PM SaaS Docs Sync"
+  short_description: "Sync durable docs after behavior or workflow changes"
+  default_prompt: "Use $docs-sync to update the affected repo docs so they match the current behavior, commands, architecture, and operating model."

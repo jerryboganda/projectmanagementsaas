@@ -1,0 +1,4 @@
+interface:
+  display_name: "PM SaaS Bug Triage"
+  short_description: "Reproduce and isolate UI defects before fixes"
+  default_prompt: "Use $bug-triage to reproduce this issue, isolate the owning boundary, and produce a concise evidence-backed fix path."

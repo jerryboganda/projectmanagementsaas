@@ -1,0 +1,18 @@
+model = "gpt-5.4"
+model_reasoning_effort = "medium"
+
+[features]
+multi_agent = true
+
+[agents]
+max_threads = 4
+max_depth = 1
+prefer_direct_children = true
+default_discovery_model = "gpt-5.4-mini"
+default_discovery_reasoning_effort = "medium"
+default_execution_model = "gpt-5.3-codex"
+default_execution_reasoning_effort = "medium"
+default_review_model = "gpt-5.4"
+default_review_reasoning_effort = "high"
+
+# No project-scoped MCP entries by default for this repo.

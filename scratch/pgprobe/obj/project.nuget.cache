@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "X5yLIpYsrPA=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Dr Faisal Maqsood PC\\Desktop\\Project Management SaaS\\scratch\\pgprobe\\pgprobe.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Dr Faisal Maqsood PC\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\Dr Faisal Maqsood PC\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\8.0.0\\microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\Dr Faisal Maqsood PC\\.nuget\\packages\\npgsql\\8.0.6\\npgsql.8.0.6.nupkg.sha512"
+  ],
+  "logs": []
+}

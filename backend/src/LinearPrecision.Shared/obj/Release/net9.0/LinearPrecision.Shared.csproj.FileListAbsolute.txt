@@ -1,0 +1,12 @@
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\bin\Release\net9.0\LinearPrecision.Shared.deps.json
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\bin\Release\net9.0\LinearPrecision.Shared.dll
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\bin\Release\net9.0\LinearPrecision.Shared.pdb
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Release\net9.0\LinearPrecision.Shared.csproj.AssemblyReference.cache
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Release\net9.0\LinearPrecision.Shared.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Release\net9.0\LinearPrecision.Shared.AssemblyInfoInputs.cache
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Release\net9.0\LinearPrecision.Shared.AssemblyInfo.cs
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Release\net9.0\LinearPrecision.Shared.csproj.CoreCompileInputs.cache
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Release\net9.0\LinearPrecision.Shared.dll
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Release\net9.0\refint\LinearPrecision.Shared.dll
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Release\net9.0\LinearPrecision.Shared.pdb
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Release\net9.0\ref\LinearPrecision.Shared.dll

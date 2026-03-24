@@ -1,0 +1,107 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'motion/react';
+import { ReportsSidebar } from './reports-sidebar';
+import { ReportsToolbar } from './reports-toolbar';
+import { ReportsSurface } from './reports-surface';
+import { ReportsDetailPanel } from './reports-detail';
+import { type LiveReportId, type ReportProject } from './data';
+import { useReportsData } from '@/hooks/use-reports-data';
+import { EmptyState } from '@/components/ui/empty-state';
+import { AlertTriangle, BarChart3, Loader2 } from 'lucide-react';
+
+export function ReportsLayout() {
+  const router = useRouter();
+  const [selectedReportId, setSelectedReportId] = useState<LiveReportId>('project-health');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const {
+    catalog,
+    activeReport,
+    exportReport,
+    selectedReportState,
+  } = useReportsData(selectedReportId);
+
+  const selectedProject = useMemo<ReportProject | null>(
+    () =>
+      activeReport?.projects.find((project) => project.id === selectedProjectId) ?? null,
+    [activeReport, selectedProjectId],
+  );
+
+  return (
+    <div className="flex flex-1 h-full overflow-hidden bg-background-dark">
+      {/* Left Navigation Rail */}
+      <ReportsSidebar 
+        catalog={catalog}
+        selectedReportId={selectedReportId} 
+        onSelectReport={(id) => {
+          setSelectedReportId(id);
+          setSelectedProjectId(null);
+        }}
+      />
+
+      {/* Main Reporting Surface */}
+      <div className="flex-1 flex flex-col min-w-0 relative bg-neutral-surface/30">
+        <ReportsToolbar 
+          activeReport={activeReport}
+          onExport={activeReport ? async () => exportReport(activeReport.id) : null}
+        />
+
+        <div className="flex-1 overflow-hidden relative flex">
+          {selectedReportState.isLoading && !activeReport ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="absolute inset-0 flex items-center justify-center bg-background-dark/50 backdrop-blur-sm z-10"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                <p className="text-sm text-slate-400">Loading live analytics...</p>
+              </div>
+            </motion.div>
+          ) : selectedReportState.error && !activeReport ? (
+            <div className="flex-1">
+              <EmptyState
+                icon={AlertTriangle}
+                title="Reports are unavailable"
+                description={
+                  selectedReportState.error instanceof Error
+                    ? selectedReportState.error.message
+                    : "The live analytics queries failed for this workspace."
+                }
+              />
+            </div>
+          ) : activeReport ? (
+            <ReportsSurface 
+              key={activeReport.id} 
+              report={activeReport} 
+              onSelectProject={(project) => setSelectedProjectId(project.id)}
+              selectedProjectId={selectedProject?.id}
+            />
+          ) : (
+            <div className="flex-1">
+              <EmptyState
+                icon={BarChart3}
+                title="Report data is not available yet"
+                description="This report does not have enough persisted workspace data yet, even though other live reports may still be available."
+              />
+            </div>
+          )}
+
+          {/* Drill-down Detail Panel */}
+          <AnimatePresence>
+            {selectedProject ? (
+              <ReportsDetailPanel 
+                project={selectedProject} 
+                onClose={() => setSelectedProjectId(null)}
+                onOpenProject={() => router.push(`/projects?projectId=${selectedProject.id}`)}
+              />
+            ) : null}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+}

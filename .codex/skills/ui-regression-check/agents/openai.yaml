@@ -1,0 +1,4 @@
+interface:
+  display_name: "PM SaaS UI Regression Check"
+  short_description: "Validate changed routes and adjacent UI risk"
+  default_prompt: "Use $ui-regression-check to validate the changed UI flow, run targeted verification, and report any regressions with precise evidence."

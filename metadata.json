@@ -1,0 +1,5 @@
+{
+  "name": "Project Management SaaS",
+  "description": "Mixed PM SaaS codebase with a Next.js frontend MVP and an ASP.NET Core backend foundation for project and portfolio workflows.",
+  "requestFramePermissions": []
+}

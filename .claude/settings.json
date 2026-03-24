@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "intercept",
+            "command": "bash -c \"if echo \\\"$CLAUDE_FILE_PATH\\\" | grep -qE '(next\\.config\\.ts|app/globals\\.css|app/layout\\.tsx)'; then echo 'WARN: Editing protected file — confirm this is intentional'; fi\"",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}

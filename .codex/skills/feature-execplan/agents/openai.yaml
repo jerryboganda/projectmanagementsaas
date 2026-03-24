@@ -1,0 +1,4 @@
+interface:
+  display_name: "PM SaaS Exec Plan"
+  short_description: "Create a phased implementation plan with validation gates"
+  default_prompt: "Use $feature-execplan to produce a decision-complete implementation plan with milestones, dependencies, serialized work, and acceptance criteria."

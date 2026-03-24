@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "true"
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend typecheck
+        run: npm run typecheck
+
+      - name: Run frontend lint
+        run: npm run lint
+
+      - name: Run frontend build
+        run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Show Docker info
+        run: docker info
+
+      - name: Restore backend solution
+        run: dotnet restore backend/LinearPrecision.sln
+
+      - name: Run API unit tests
+        run: dotnet test backend/tests/LinearPrecision.Api.Tests/LinearPrecision.Api.Tests.csproj --no-restore
+
+      - name: Run worker tests
+        run: dotnet test backend/tests/LinearPrecision.Worker.Tests/LinearPrecision.Worker.Tests.csproj --no-restore
+
+      - name: Run integration tests
+        run: dotnet test backend/tests/LinearPrecision.Integration.Tests/LinearPrecision.Integration.Tests.csproj --no-restore
+
+  docker-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs:
+      - frontend
+      - backend
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: web
+            context: .
+            dockerfile: ./Dockerfile
+            build_args: |
+              NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+              NEXT_PUBLIC_SIGNALR_BASE_URL=http://localhost:5000
+            load: true
+          - name: api
+            context: ./backend
+            dockerfile: ./backend/src/LinearPrecision.Api/Dockerfile
+            build_args: ""
+            load: false
+          - name: worker
+            context: ./backend
+            dockerfile: ./backend/src/LinearPrecision.Worker/Dockerfile
+            build_args: ""
+            load: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
+          load: ${{ matrix.load }}
+          push: false
+          tags: linearprecision/${{ matrix.name }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test web image
+        if: matrix.name == 'web'
+        run: |
+          docker run -d --rm --name linearprecision-web-smoke -p 3000:3000 linearprecision/web:ci
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health >/dev/null; then
+              docker stop linearprecision-web-smoke
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs linearprecision-web-smoke
+          docker stop linearprecision-web-smoke
+          exit 1

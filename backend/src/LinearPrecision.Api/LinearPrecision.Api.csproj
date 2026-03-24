@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>LinearPrecision.Api</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LinearPrecision.Shared\LinearPrecision.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ASP.NET Core built-ins -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="9.0.*" />
+
+    <!-- EF Core + PostgreSQL -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.*" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.*">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="EFCore.NamingConventions" Version="9.0.*" />
+
+    <!-- Dapper for analytics queries -->
+    <PackageReference Include="Dapper" Version="2.*" />
+
+    <!-- Redis -->
+    <PackageReference Include="StackExchange.Redis" Version="2.*" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.*" />
+
+    <!-- SignalR Redis backplane -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="9.0.*" />
+
+    <!-- MediatR + FluentValidation -->
+    <PackageReference Include="MediatR" Version="12.*" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.*" />
+
+    <!-- Background jobs -->
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.*" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.20.*" />
+
+    <!-- AI -->
+    <PackageReference Include="Microsoft.Extensions.AI" Version="9.*" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="9.*" />
+
+    <!-- Feature flags -->
+    <PackageReference Include="Microsoft.FeatureManagement.AspNetCore" Version="4.*" />
+
+    <!-- Observability -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.*" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.*" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.*" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.*" />
+    <PackageReference Include="Serilog.Sinks.OpenTelemetry" Version="4.*" />
+
+    <!-- PDF, Email, S3 -->
+    <PackageReference Include="QuestPDF" Version="2024.*" />
+    <PackageReference Include="MailKit" Version="4.*" />
+    <PackageReference Include="AWSSDK.S3" Version="3.*" />
+
+    <!-- Billing -->
+    <PackageReference Include="Stripe.net" Version="45.*" />
+
+    <!-- API docs UI -->
+    <PackageReference Include="Scalar.AspNetCore" Version="1.*" />
+
+    <!-- Health checks -->
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.*" />
+    <PackageReference Include="AspNetCore.HealthChecks.Redis" Version="9.*" />
+    <PackageReference Include="AspNetCore.HealthChecks.Uris" Version="9.*" />
+  </ItemGroup>
+
+</Project>

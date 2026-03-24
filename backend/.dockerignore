@@ -1,0 +1,28 @@
+# Build artifacts
+**/bin/
+**/obj/
+
+# Test projects
+tests/
+
+# User secrets / local overrides
+**/appsettings.*.json
+!**/appsettings.json
+!**/appsettings.Development.json
+
+# IDE
+.vs/
+.idea/
+*.user
+
+# Git
+.git/
+.gitignore
+
+# Docs
+docs/
+*.md
+
+# Misc
+.env
+.env.*

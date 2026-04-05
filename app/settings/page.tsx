@@ -8,17 +8,17 @@ import { ErrorBoundary } from '@/components/error-boundary';
 
 export default function SettingsPage() {
   return (
-    <div className="flex h-screen bg-background-dark text-slate-200 overflow-hidden font-sans">
+    <>
       <Sidebar />
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Header />
+      <main className="flex-1 flex flex-col overflow-hidden bg-background-dark relative min-w-0">
+        <Header title="Settings" />
         <Breadcrumbs />
-        <main className="flex-1 flex overflow-hidden relative">
+        <div className="flex-1 flex overflow-hidden relative">
           <ErrorBoundary featureName="Settings">
             <SettingsLayout />
           </ErrorBoundary>
-        </main>
-      </div>
-    </div>
+        </div>
+      </main>
+    </>
   );
 }

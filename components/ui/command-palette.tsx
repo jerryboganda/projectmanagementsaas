@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'motion/react';
@@ -622,9 +623,11 @@ export function CommandPalette({
                         {item.avatar ? (
                           <span className="size-[24px] shrink-0 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-medium text-slate-300 overflow-hidden">
                             {item.avatar.src ? (
-                              <img
+                              <Image
                                 src={item.avatar.src}
                                 alt={item.avatar.initials}
+                                width={24}
+                                height={24}
                                 className="size-full object-cover"
                               />
                             ) : (

@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import type { IntakeFieldSchema } from "@/lib/api/contracts";
 import type { IntakeFormSurface, IntakeSubmissionSurface } from "@/components/intake/data";
 import { useIntakeData } from "@/hooks/use-intake-data";
+import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -22,6 +24,7 @@ import {
   Search,
   Send,
   User,
+  X,
   XCircle,
 } from "lucide-react";
 
@@ -223,6 +226,303 @@ function SubmissionActions({
   return <span className="text-[11px] text-slate-600">—</span>;
 }
 
+function SubmissionDetailPanel({
+  form,
+  submission,
+  canConvert,
+  isBusy,
+  getMemberName,
+  onReview,
+  onApprove,
+  onReject,
+  onConvert,
+  onClose,
+}: {
+  form: IntakeFormSurface;
+  submission: IntakeSubmissionSurface;
+  canConvert: boolean;
+  isBusy: boolean;
+  getMemberName: (userId?: string | null, fallbackEmail?: string | null) => string;
+  onReview: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+  onConvert: () => void;
+  onClose: () => void;
+}) {
+  const config = STATUS_CONFIG[submission.status];
+  const StatusIcon = config.icon;
+  const submitter = getMemberName(submission.submitterUserId, submission.submitterEmail);
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-0 bg-black/50 z-40"
+        onClick={onClose}
+      />
+      <motion.aside
+        initial={{ x: "100%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 300 }}
+        className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-neutral-surface border-l border-neutral-border z-50 flex flex-col overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-border">
+          <div className="min-w-0">
+            <h3 className="text-[14px] font-semibold text-slate-100 truncate">
+              Submission Detail
+            </h3>
+            <p className="text-[11px] text-slate-500 truncate">{form.name}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-white/5 rounded-sm transition-colors"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-5 py-4 border-b border-neutral-border/50 space-y-3">
+            <h4 className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+              Metadata
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">
+                  Status
+                </p>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-sm border",
+                    config.className,
+                  )}
+                >
+                  <StatusIcon className="size-3" />
+                  {config.label}
+                </span>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">
+                  Submitted By
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <div className="size-5 bg-slate-800 border border-neutral-border rounded-sm flex items-center justify-center">
+                    <User className="size-2.5 text-slate-500" />
+                  </div>
+                  <span className="text-[12px] text-slate-300 truncate">
+                    {submitter}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">
+                  Submitted At
+                </p>
+                <p className="text-[12px] text-slate-300">
+                  {formatDate(submission.submittedAt)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">
+                  Form
+                </p>
+                <p className="text-[12px] text-slate-300 truncate">
+                  {form.name}
+                </p>
+              </div>
+              {submission.reviewedAt ? (
+                <div>
+                  <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">
+                    Reviewed At
+                  </p>
+                  <p className="text-[12px] text-slate-300">
+                    {formatDate(submission.reviewedAt)}
+                  </p>
+                </div>
+              ) : null}
+              {submission.reviewNotes ? (
+                <div className="col-span-2">
+                  <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">
+                    Review Notes
+                  </p>
+                  <p className="text-[12px] text-slate-300">
+                    {submission.reviewNotes}
+                  </p>
+                </div>
+              ) : null}
+              {submission.convertedTaskId ? (
+                <div className="col-span-2">
+                  <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">
+                    Converted Task
+                  </p>
+                  <p className="text-[12px] text-primary font-mono">
+                    {submission.convertedTaskId}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="px-5 py-4 space-y-3">
+            <h4 className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+              Field Values
+            </h4>
+            {form.fields.length === 0 ? (
+              <p className="text-[12px] text-slate-600 italic">
+                This form has no field schema defined.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {form.fields.map((field) => {
+                  const value = submission.values[field.label];
+                  return (
+                    <div
+                      key={field.id}
+                      className="bg-background-dark border border-neutral-border/50 rounded-sm p-3"
+                    >
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
+                        {field.label}
+                        {field.required ? (
+                          <span className="text-red-400 ml-0.5">*</span>
+                        ) : null}
+                      </p>
+                      <p
+                        className={cn(
+                          "text-[13px]",
+                          value
+                            ? "text-slate-200"
+                            : "text-slate-600 italic",
+                        )}
+                      >
+                        {value || "No value provided"}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {Object.keys(submission.values).filter(
+              (key) => !form.fields.some((field) => field.label === key),
+            ).length > 0 ? (
+              <div className="mt-4">
+                <h4 className="text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-3">
+                  Additional Values
+                </h4>
+                <div className="space-y-3">
+                  {Object.entries(submission.values)
+                    .filter(
+                      ([key]) =>
+                        !form.fields.some((field) => field.label === key),
+                    )
+                    .map(([key, value]) => (
+                      <div
+                        key={key}
+                        className="bg-background-dark border border-neutral-border/50 rounded-sm p-3"
+                      >
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
+                          {key}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-[13px]",
+                            value
+                              ? "text-slate-200"
+                              : "text-slate-600 italic",
+                          )}
+                        >
+                          {value || "No value provided"}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="px-5 py-4 border-t border-neutral-border flex items-center justify-between gap-3">
+          <button
+            onClick={onClose}
+            className="h-8 px-4 text-[12px] text-slate-400 border border-neutral-border rounded-sm hover:border-slate-600 transition-colors"
+          >
+            Close
+          </button>
+          <div className="flex items-center gap-2">
+            {submission.status === "new" ? (
+              <>
+                <button
+                  onClick={onReview}
+                  disabled={isBusy}
+                  className="h-8 px-3 text-[12px] text-blue-400 border border-blue-500/20 bg-blue-500/10 rounded-sm hover:bg-blue-500/20 disabled:opacity-40 transition-colors"
+                >
+                  Review
+                </button>
+                <button
+                  onClick={onApprove}
+                  disabled={isBusy}
+                  className="h-8 px-3 text-[12px] text-emerald-400 border border-emerald-500/20 bg-emerald-500/10 rounded-sm hover:bg-emerald-500/20 disabled:opacity-40 transition-colors"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={onReject}
+                  disabled={isBusy}
+                  className="h-8 px-3 text-[12px] text-red-400 border border-red-500/20 bg-red-500/10 rounded-sm hover:bg-red-500/20 disabled:opacity-40 transition-colors"
+                >
+                  Reject
+                </button>
+              </>
+            ) : null}
+            {submission.status === "inReview" ? (
+              <>
+                <button
+                  onClick={onApprove}
+                  disabled={isBusy}
+                  className="h-8 px-3 text-[12px] text-emerald-400 border border-emerald-500/20 bg-emerald-500/10 rounded-sm hover:bg-emerald-500/20 disabled:opacity-40 transition-colors"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={onReject}
+                  disabled={isBusy}
+                  className="h-8 px-3 text-[12px] text-red-400 border border-red-500/20 bg-red-500/10 rounded-sm hover:bg-red-500/20 disabled:opacity-40 transition-colors"
+                >
+                  Reject
+                </button>
+              </>
+            ) : null}
+            {submission.status === "accepted" && canConvert ? (
+              <button
+                onClick={onConvert}
+                disabled={isBusy}
+                className="h-8 px-3 text-[12px] text-blue-400 border border-blue-500/20 bg-blue-500/10 rounded-sm hover:bg-blue-500/20 disabled:opacity-40 flex items-center gap-1.5 transition-colors"
+              >
+                <ArrowRightLeft className="size-3" />
+                Convert to Task
+              </button>
+            ) : null}
+            {submission.status === "converted" ? (
+              <span className="text-[11px] text-slate-600">
+                Already converted
+              </span>
+            ) : null}
+            {submission.status === "rejected" ? (
+              <span className="text-[11px] text-slate-600">
+                Submission rejected
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </motion.aside>
+    </>
+  );
+}
+
 export function IntakeLayout() {
   const {
     canConvertSubmission,
@@ -250,6 +550,7 @@ export function IntakeLayout() {
   const [search, setSearch] = useState("");
   const [previewValues, setPreviewValues] = useState<Record<string, string>>({});
   const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
 
   const selectedForm = useMemo(
     () => (selectedFormId ? forms.find((form) => form.id === selectedFormId) ?? null : forms[0] ?? null),
@@ -278,6 +579,10 @@ export function IntakeLayout() {
 
   const isBusy = isSubmitting || isReviewing || isConverting;
   const previewUsers = members.map((member) => ({ id: member.userId, name: member.fullName }));
+  const selectedSubmission = useMemo(
+    () => (selectedSubmissionId ? selectedSubmissions.find((item) => item.id === selectedSubmissionId) ?? null : null),
+    [selectedSubmissions, selectedSubmissionId],
+  );
 
   const runAction = useCallback(async (action: () => Promise<unknown>) => {
     setActionError(null);
@@ -445,7 +750,7 @@ export function IntakeLayout() {
                         const config = STATUS_CONFIG[submission.status];
                         const StatusIcon = config.icon;
                         return (
-                          <tr key={submission.id} className="border-b border-neutral-border/40 hover:bg-white/[0.02]">
+                          <tr key={submission.id} onClick={() => setSelectedSubmissionId(submission.id)} className="border-b border-neutral-border/40 hover:bg-white/[0.02] cursor-pointer">
                             <td className="py-3 px-4"><div className="flex items-center gap-2"><div className="size-6 bg-slate-800 border border-neutral-border rounded-sm flex items-center justify-center"><User className="size-3 text-slate-500" /></div><span className="text-[12px] text-slate-300 truncate max-w-[160px]">{getMemberName(submission.submitterUserId, submission.submitterEmail)}</span></div></td>
                             {selectedForm.fields.slice(0, 2).map((field) => <td key={field.id} className="py-3 px-4 text-[12px] text-slate-300 truncate max-w-[180px]">{submission.values[field.label] || "—"}</td>)}
                             {selectedForm.fields.length < 2 ? <td className="py-3 px-4" /> : null}
@@ -474,6 +779,24 @@ export function IntakeLayout() {
           )}
         </section>
       </div>
+
+      <AnimatePresence>
+        {selectedForm && selectedSubmission ? (
+          <SubmissionDetailPanel
+            key={selectedSubmission.id}
+            form={selectedForm}
+            submission={selectedSubmission}
+            canConvert={canConvertSubmission(selectedForm, selectedSubmission)}
+            isBusy={isBusy}
+            getMemberName={getMemberName}
+            onReview={() => void runAction(async () => { await reviewSubmission(selectedSubmission.id, "inReview"); setSelectedSubmissionId(null); })}
+            onApprove={() => void runAction(async () => { await reviewSubmission(selectedSubmission.id, "accepted"); setSelectedSubmissionId(null); })}
+            onReject={() => void runAction(async () => { await reviewSubmission(selectedSubmission.id, "rejected"); setSelectedSubmissionId(null); })}
+            onConvert={() => void runAction(async () => { await convertSubmission(selectedForm, selectedSubmission); setSelectedSubmissionId(null); })}
+            onClose={() => setSelectedSubmissionId(null)}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

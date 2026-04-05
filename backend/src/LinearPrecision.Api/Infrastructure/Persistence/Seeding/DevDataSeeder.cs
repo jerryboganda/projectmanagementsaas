@@ -1,6 +1,7 @@
 using System.Text.Json;
 using LinearPrecision.Api.Entities;
 using LinearPrecision.Shared.Domain.Enums;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinearPrecision.Api.Infrastructure.Persistence.Seeding;
@@ -14,6 +15,8 @@ public static class DevDataSeeder
     {
         if (await context.Users.AnyAsync())
             return;
+
+        var hasher = new PasswordHasher<User>();
 
         // --- Users ---
         var adminUser = new User
@@ -34,6 +37,7 @@ public static class DevDataSeeder
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+        adminUser.PasswordHash = hasher.HashPassword(adminUser, "Admin1234");
 
         var memberUser = new User
         {
@@ -53,6 +57,7 @@ public static class DevDataSeeder
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+        memberUser.PasswordHash = hasher.HashPassword(memberUser, "Member1234");
 
         context.Users.AddRange(adminUser, memberUser);
         await context.SaveChangesAsync();

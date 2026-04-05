@@ -8,17 +8,17 @@ import { ErrorBoundary } from '@/components/error-boundary';
 
 export default function DocsPage() {
   return (
-    <div className="flex h-screen bg-background-dark text-slate-200 overflow-hidden selection:bg-primary/30 selection:text-primary-50">
+    <>
       <Sidebar />
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Header />
+      <main className="flex-1 flex flex-col overflow-hidden bg-background-dark relative min-w-0">
+        <Header title="Documents" />
         <Breadcrumbs />
-        <main className="flex-1 flex overflow-hidden relative">
+        <div className="flex-1 flex overflow-hidden relative">
           <ErrorBoundary featureName="Documents">
             <DocsLayout />
           </ErrorBoundary>
-        </main>
-      </div>
-    </div>
+        </div>
+      </main>
+    </>
   );
 }

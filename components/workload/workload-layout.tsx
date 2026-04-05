@@ -29,6 +29,9 @@ export function WorkloadLayout() {
     refresh,
     hasData,
     hasFilteredResults,
+    exportCsv,
+    workloadLevelFilter,
+    setWorkloadLevelFilter,
   } = useWorkloadData();
 
   return (
@@ -41,6 +44,9 @@ export function WorkloadLayout() {
         onProjectChange={setSelectedProjectId}
         onRefresh={refresh}
         isRefreshing={isRefreshing}
+        onExportCsv={hasData ? exportCsv : null}
+        workloadLevelFilter={workloadLevelFilter}
+        onWorkloadLevelFilterChange={setWorkloadLevelFilter}
       />
 
       <WorkloadSummary summary={summary} />
@@ -55,7 +61,9 @@ export function WorkloadLayout() {
           >
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="size-8 animate-spin text-primary" />
-              <p className="text-sm text-slate-400">Loading live workload data...</p>
+              <p className="text-sm text-slate-400">
+                Loading live workload data...
+              </p>
             </div>
           </motion.div>
         ) : error ? (
@@ -84,10 +92,13 @@ export function WorkloadLayout() {
           <div className="flex flex-1 items-center justify-center">
             <EmptyState
               icon={Users}
-              title="No team members match the current search"
-              description="Try clearing the search box or switching projects."
-              actionLabel="Clear search"
-              onAction={() => setSearchQuery("")}
+              title="No team members match the current filters"
+              description="Try clearing the search box, switching projects, or adjusting the workload level filter."
+              actionLabel="Clear filters"
+              onAction={() => {
+                setSearchQuery("");
+                setWorkloadLevelFilter("all");
+              }}
             />
           </div>
         ) : (

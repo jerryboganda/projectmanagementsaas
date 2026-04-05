@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { parseTimelineDate, timelineSourceLabel, type TimelineItem } from "./data";
 import { motion } from "motion/react";
@@ -591,9 +592,11 @@ export function TimelineSurface({
                           {item.assignee && (
                             <div className="flex-shrink-0 size-4 rounded-full bg-background-dark/50 flex items-center justify-center overflow-hidden border border-white/10 pointer-events-none">
                               {item.assignee.avatarUrl ? (
-                                <img
+                                <Image
                                   src={item.assignee.avatarUrl}
                                   alt={item.assignee.name}
+                                  width={16}
+                                  height={16}
                                   className="w-full h-full object-cover"
                                 />
                               ) : (

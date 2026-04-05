@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LinearPrecision.Shared")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5738fe49c1c1f9a68f435e0a71238eaa90cc87f5")]
 [assembly: System.Reflection.AssemblyProductAttribute("LinearPrecision.Shared")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LinearPrecision.Shared")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

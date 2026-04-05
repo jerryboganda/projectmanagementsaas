@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Check,
@@ -10,6 +10,7 @@ import {
   Loader2,
   Monitor,
   Moon,
+  RotateCcw,
   Save,
   Sun,
   Type,
@@ -23,6 +24,40 @@ type FontSize = 'small' | 'medium' | 'large';
 type DateFormat = 'MM/DD/YYYY' | 'DD/MM/YYYY' | 'YYYY-MM-DD';
 type TimeFormat = '12h' | '24h';
 type Language = 'en-US' | 'en-GB' | 'es' | 'fr' | 'de' | 'ja' | 'zh';
+
+interface AppearancePreferences {
+  theme: ThemeMode;
+  accent: AccentColor;
+  density: SidebarDensity;
+  fontSize: FontSize;
+  dateFormat: DateFormat;
+  timeFormat: TimeFormat;
+  language: Language;
+}
+
+const DEFAULTS: AppearancePreferences = {
+  theme: 'dark',
+  accent: 'blue',
+  density: 'comfortable',
+  fontSize: 'medium',
+  dateFormat: 'MM/DD/YYYY',
+  timeFormat: '12h',
+  language: 'en-US',
+};
+
+const STORAGE_KEY = 'lp-appearance-preferences';
+
+/** Read persisted prefs from localStorage. Safe for SSR (returns empty). */
+function loadStoredPreferences(): Partial<AppearancePreferences> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored) as Partial<AppearancePreferences>;
+  } catch {
+    // Silently ignore corrupted localStorage data
+  }
+  return {};
+}
 
 const ACCENT_COLORS: { id: AccentColor; label: string; hex: string; cls: string }[] = [
   { id: 'blue', label: 'Blue', hex: '#1313ec', cls: 'bg-[#1313ec]' },
@@ -125,23 +160,61 @@ function OptionPill<T extends string>({
 }
 
 export function AppearancePanel() {
-  const [theme, setTheme] = useState<ThemeMode>('dark');
-  const [accent, setAccent] = useState<AccentColor>('blue');
-  const [density, setDensity] = useState<SidebarDensity>('comfortable');
-  const [fontSize, setFontSize] = useState<FontSize>('medium');
-  const [dateFormat, setDateFormat] = useState<DateFormat>('MM/DD/YYYY');
-  const [timeFormat, setTimeFormat] = useState<TimeFormat>('12h');
-  const [language, setLanguage] = useState<Language>('en-US');
+  // Lazy initializers read from localStorage once on first render,
+  // avoiding the React 19 lint error for setState inside useEffect.
+  const [theme, setTheme] = useState<ThemeMode>(() => loadStoredPreferences().theme ?? DEFAULTS.theme);
+  const [accent, setAccent] = useState<AccentColor>(() => loadStoredPreferences().accent ?? DEFAULTS.accent);
+  const [density, setDensity] = useState<SidebarDensity>(() => loadStoredPreferences().density ?? DEFAULTS.density);
+  const [fontSize, setFontSize] = useState<FontSize>(() => loadStoredPreferences().fontSize ?? DEFAULTS.fontSize);
+  const [dateFormat, setDateFormat] = useState<DateFormat>(() => loadStoredPreferences().dateFormat ?? DEFAULTS.dateFormat);
+  const [timeFormat, setTimeFormat] = useState<TimeFormat>(() => loadStoredPreferences().timeFormat ?? DEFAULTS.timeFormat);
+  const [language, setLanguage] = useState<Language>(() => loadStoredPreferences().language ?? DEFAULTS.language);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const handleSave = async () => {
     setSaving(true);
     await new Promise((r) => setTimeout(r, 800));
+
+    const prefs: AppearancePreferences = {
+      theme,
+      accent,
+      density,
+      fontSize,
+      dateFormat,
+      timeFormat,
+      language,
+    };
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    } catch {
+      // Silently handle quota errors
+    }
+
     setSaving(false);
     setMessage('Appearance preferences saved.');
     setTimeout(() => setMessage(null), 4000);
   };
+
+  const handleReset = useCallback(() => {
+    setTheme(DEFAULTS.theme);
+    setAccent(DEFAULTS.accent);
+    setDensity(DEFAULTS.density);
+    setFontSize(DEFAULTS.fontSize);
+    setDateFormat(DEFAULTS.dateFormat);
+    setTimeFormat(DEFAULTS.timeFormat);
+    setLanguage(DEFAULTS.language);
+
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Silently handle errors
+    }
+
+    setMessage('Preferences reset to defaults.');
+    setTimeout(() => setMessage(null), 4000);
+  }, []);
 
   const selectedAccent = ACCENT_COLORS.find((c) => c.id === accent);
 
@@ -422,17 +495,30 @@ export function AppearancePanel() {
               </motion.div>
             ) : <div />}
           </AnimatePresence>
-          <button
-            onClick={() => void handleSave()}
-            disabled={saving}
-            className={cn(
-              'flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90',
-              saving && 'cursor-not-allowed opacity-60',
-            )}
-          >
-            {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleReset}
+              disabled={saving}
+              className={cn(
+                'flex items-center gap-2 rounded-md border border-neutral-border bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-slate-100',
+                saving && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              <RotateCcw className="size-4" />
+              Reset to Defaults
+            </button>
+            <button
+              onClick={() => void handleSave()}
+              disabled={saving}
+              className={cn(
+                'flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90',
+                saving && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>

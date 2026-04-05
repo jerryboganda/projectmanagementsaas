@@ -198,7 +198,10 @@ export function GoalsLayout() {
                 isSaving={goalsData.isSavingGoal}
                 isDeleting={goalsData.isDeletingGoal}
                 isLinkingProject={goalsData.isLinkingGoalProject}
+                isUnlinkingProject={goalsData.isUnlinkingProject}
                 isCreatingInitiative={goalsData.isCreatingInitiative}
+                isUpdatingInitiative={goalsData.isUpdatingInitiative}
+                isDeletingInitiative={goalsData.isDeletingInitiative}
                 onClose={() => setSelectedGoalId(null)}
                 onSave={async (input) => {
                   await goalsData.updateGoal(goalsData.selectedGoal!.id, input);
@@ -210,8 +213,17 @@ export function GoalsLayout() {
                 onLinkProject={async (projectId) => {
                   await goalsData.linkProject(goalsData.selectedGoal!.id, projectId);
                 }}
+                onUnlinkProject={async (projectId) => {
+                  await goalsData.unlinkProject(goalsData.selectedGoal!.id, projectId);
+                }}
                 onCreateInitiative={async (input) => {
                   await goalsData.createInitiative(goalsData.selectedGoal!.id, input);
+                }}
+                onUpdateInitiative={async (initiativeId, input) => {
+                  await goalsData.updateInitiative(goalsData.selectedGoal!.id, initiativeId, input);
+                }}
+                onDeleteInitiative={async (initiativeId) => {
+                  await goalsData.deleteInitiative(goalsData.selectedGoal!.id, initiativeId);
                 }}
                 onCreateSubGoal={() => {
                   setCreateParentGoalId(goalsData.selectedGoal!.id);

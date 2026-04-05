@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { HubConnection } from "@microsoft/signalr";
+import { HubConnectionState } from "@microsoft/signalr";
 import { useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { useRealtime } from "@/contexts/realtime-context";
@@ -206,21 +207,25 @@ export function useBoardData(selectedTaskId?: string | null) {
     const handleTaskDeleted = (payload: BoardHubPayload) => invalidateBoardData(payload);
 
     const start = async () => {
-      connection = await connect("/hubs/board");
-      if (disposed) {
-        return;
+      try {
+        connection = await connect("/hubs/board");
+        if (disposed || connection.state !== HubConnectionState.Connected) {
+          return;
+        }
+
+        connection.on("TaskCreated", handleTaskCreated);
+        connection.on("TaskUpdated", handleTaskUpdated);
+        connection.on("TaskMoved", handleTaskMoved);
+        connection.on("TaskDeleted", handleTaskDeleted);
+
+        for (const projectId of projectIds) {
+          await connection.invoke("JoinBoard", projectId).catch(() => undefined);
+        }
+
+        joinedProjectIds = projectIds;
+      } catch {
+        // Realtime unavailable — board still works via polling
       }
-
-      connection.on("TaskCreated", handleTaskCreated);
-      connection.on("TaskUpdated", handleTaskUpdated);
-      connection.on("TaskMoved", handleTaskMoved);
-      connection.on("TaskDeleted", handleTaskDeleted);
-
-      for (const projectId of projectIds) {
-        await connection.invoke("JoinBoard", projectId);
-      }
-
-      joinedProjectIds = projectIds;
     };
 
     void start();

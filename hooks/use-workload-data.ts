@@ -13,10 +13,12 @@ import {
   getTaskStatusLabel,
   getTaskStatusTone,
   getWorkloadTone,
+  getWorkloadToneLabel,
   type WorkloadMemberView,
   type WorkloadProjectOption,
   type WorkloadSummaryStats,
   type WorkloadTaskView,
+  type WorkloadTone,
 } from "@/components/workload/data";
 
 function workloadQueryKey(workspaceId: string | null, projectId: string | null) {
@@ -93,6 +95,7 @@ export function useWorkloadData() {
   const [preferredSelectedMemberId, setPreferredSelectedMemberId] = useState<string | null>(null);
   const [isMemberDetailOpen, setIsMemberDetailOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [workloadLevelFilter, setWorkloadLevelFilter] = useState<WorkloadTone | "all">("all");
 
   const projectsQuery = useQuery({
     queryKey: workloadProjectsQueryKey(activeWorkspaceId),
@@ -179,11 +182,18 @@ export function useWorkloadData() {
   const filteredMembers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    if (!query) {
-      return members;
+    let result = members;
+
+    // Apply workload level filter
+    if (workloadLevelFilter !== "all") {
+      result = result.filter((member) => member.workloadTone === workloadLevelFilter);
     }
 
-    return members.filter((member) => {
+    if (!query) {
+      return result;
+    }
+
+    return result.filter((member) => {
       const searchableText = [
         member.fullName,
         getInitials(member.fullName),
@@ -198,7 +208,7 @@ export function useWorkloadData() {
 
       return searchableText.includes(query);
     });
-  }, [members, searchQuery]);
+  }, [members, searchQuery, workloadLevelFilter]);
 
   const selectedMemberId = useMemo(() => {
     if (!isMemberDetailOpen) {
@@ -238,6 +248,35 @@ export function useWorkloadData() {
   const isRefreshing = workloadQuery.isFetching || tasksQuery.isFetching || projectsQuery.isFetching;
   const error = workloadQuery.error ?? null;
 
+  const exportCsv = () => {
+    if (filteredMembers.length === 0) return;
+
+    const headers = ["Member", "Active Tasks", "Completed", "Points", "Hours", "Workload Level"];
+    const rows = filteredMembers.map((member) => [
+      member.fullName,
+      String(member.activeTaskCount),
+      String(member.completedTasks),
+      String(member.totalPoints),
+      String(Number(member.totalHoursLogged).toFixed(1)),
+      getWorkloadToneLabel(member.workloadTone),
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+
+    if (typeof window !== "undefined") {
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `workload-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    }
+  };
+
   return {
     activeWorkspaceId,
     projectOptions,
@@ -270,6 +309,9 @@ export function useWorkloadData() {
     workloadQuery,
     tasksQuery,
     projectsQuery,
+    exportCsv,
+    workloadLevelFilter,
+    setWorkloadLevelFilter,
     taskStatusLabel: getTaskStatusLabel,
     taskStatusTone: getTaskStatusTone,
     priorityLabel: getPriorityLabel,

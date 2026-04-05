@@ -216,11 +216,13 @@ export function TimelineLayout() {
                   selectedItem.priority,
                   selectedItem.startDate,
                   selectedItem.endDate,
+                  selectedItem.assignee?.id ?? "",
                 ].join(":")}
                 item={selectedItem}
                 onClose={() => setSelectedItemId(null)}
                 onSave={handleDetailSave}
                 isSaving={savingItemId === selectedItem.id}
+                members={assigneeOptions}
               />
             </div>
           )}

@@ -9,6 +9,7 @@ import {
   type TimelineItem,
   type TimelineStatus,
   type TimelinePriority,
+  type TimelineAssigneeOption,
 } from "./data";
 import { motion } from "motion/react";
 import {
@@ -30,6 +31,7 @@ interface Props {
   onClose: () => void;
   onSave?: (item: TimelineItem, updates: TimelineUpdateInput) => Promise<void>;
   isSaving?: boolean;
+  members?: TimelineAssigneeOption[];
 }
 
 const STATUS_OPTIONS: { value: TimelineStatus; label: string }[] = [
@@ -69,7 +71,7 @@ const getStatusColor = (status: string) => {
   }
 };
 
-export function TimelineDetail({ item, onClose, onSave, isSaving }: Props) {
+export function TimelineDetail({ item, onClose, onSave, isSaving, members }: Props) {
   const isTask = item.sourceType === "task";
   const canEdit = !!onSave && (isTask || item.sourceType === "sprint");
 
@@ -80,6 +82,7 @@ export function TimelineDetail({ item, onClose, onSave, isSaving }: Props) {
   const [priority, setPriority] = useState<TimelinePriority>(item.priority);
   const [startDate, setStartDate] = useState(item.startDate);
   const [endDate, setEndDate] = useState(item.endDate);
+  const [assigneeId, setAssigneeId] = useState<string | null>(item.assignee?.id ?? null);
   const [isDirty, setIsDirty] = useState(false);
 
   const markDirty = () => setIsDirty(true);
@@ -98,6 +101,7 @@ export function TimelineDetail({ item, onClose, onSave, isSaving }: Props) {
     if (priority !== item.priority) updates.priority = priority;
     if (startDate !== item.startDate) updates.startDate = startDate;
     if (endDate !== item.endDate) updates.endDate = endDate;
+    if (assigneeId !== (item.assignee?.id ?? null)) updates.assigneeId = assigneeId;
     await onSave(item, updates);
     setIsDirty(false);
   };
@@ -296,23 +300,43 @@ export function TimelineDetail({ item, onClose, onSave, isSaving }: Props) {
         {/* Assignee */}
         <div className="space-y-1">
           <span className={labelClass}>Assignee</span>
-          <div className="flex items-center gap-2">
-            {item.assignee ? (
-              <>
-                <div className="size-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-medium text-primary border border-primary/30">
-                  {item.assignee.initials}
-                </div>
-                <span className="text-[13px] text-slate-300">{item.assignee.name}</span>
-              </>
-            ) : (
-              <>
-                <div className="size-6 rounded-full bg-white/[0.05] flex items-center justify-center border border-white/[0.1]">
-                  <UserIcon className="size-3 text-slate-500" />
-                </div>
-                <span className="text-[13px] text-slate-500">Unassigned</span>
-              </>
-            )}
-          </div>
+          {canEdit && isTask ? (
+            <select
+              value={assigneeId ?? ""}
+              onChange={(e) => {
+                setAssigneeId(e.target.value || null);
+                markDirty();
+              }}
+              className={selectClass}
+            >
+              <option value="" className="bg-background-dark text-slate-200">
+                Unassigned
+              </option>
+              {(members ?? []).map((member) => (
+                <option key={member.id} value={member.id} className="bg-background-dark text-slate-200">
+                  {member.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="flex items-center gap-2">
+              {item.assignee ? (
+                <>
+                  <div className="size-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-medium text-primary border border-primary/30">
+                    {item.assignee.initials}
+                  </div>
+                  <span className="text-[13px] text-slate-300">{item.assignee.name}</span>
+                </>
+              ) : (
+                <>
+                  <div className="size-6 rounded-full bg-white/[0.05] flex items-center justify-center border border-white/[0.1]">
+                    <UserIcon className="size-3 text-slate-500" />
+                  </div>
+                  <span className="text-[13px] text-slate-500">Unassigned</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Project */}

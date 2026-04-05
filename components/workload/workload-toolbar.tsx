@@ -1,9 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
-import { RefreshCcw, Search, Briefcase, SlidersHorizontal } from "lucide-react";
+import { useMemo, useState, useRef, useEffect } from "react";
+import { RefreshCcw, Search, Briefcase, SlidersHorizontal, Download, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { WorkloadProjectOption } from "./data";
+import type { WorkloadProjectOption, WorkloadTone } from "./data";
+import { getWorkloadToneLabel, getWorkloadToneClasses } from "./data";
+
+type WorkloadLevelFilter = WorkloadTone | "all";
+
+const WORKLOAD_LEVEL_OPTIONS: { value: WorkloadLevelFilter; label: string }[] = [
+  { value: "all", label: "All Levels" },
+  { value: "idle", label: "Idle" },
+  { value: "balanced", label: "Balanced" },
+  { value: "watch", label: "Watch" },
+  { value: "busy", label: "Busy" },
+];
 
 interface Props {
   searchQuery: string;
@@ -13,7 +24,12 @@ interface Props {
   onProjectChange: (projectId: string | null) => void;
   onRefresh: () => Promise<void>;
   isRefreshing: boolean;
+  onExportCsv: (() => void) | null;
+  workloadLevelFilter: WorkloadLevelFilter;
+  onWorkloadLevelFilterChange: (level: WorkloadLevelFilter) => void;
 }
+
+export type { WorkloadLevelFilter };
 
 export function WorkloadToolbar({
   searchQuery,
@@ -23,8 +39,23 @@ export function WorkloadToolbar({
   onProjectChange,
   onRefresh,
   isRefreshing,
+  onExportCsv,
+  workloadLevelFilter,
+  onWorkloadLevelFilterChange,
 }: Props) {
-  const hasActiveFilters = searchQuery.trim().length > 0 || !!selectedProjectId;
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const hasActiveFilters = searchQuery.trim().length > 0 || !!selectedProjectId || workloadLevelFilter !== "all";
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const selectedProjectLabel = useMemo(() => {
     if (!selectedProjectId) {
@@ -37,6 +68,7 @@ export function WorkloadToolbar({
   const clearFilters = () => {
     onSearchChange("");
     onProjectChange(null);
+    onWorkloadLevelFilterChange("all");
   };
 
   return (
@@ -88,6 +120,22 @@ export function WorkloadToolbar({
         <span className="hidden rounded-full border border-neutral-border bg-white/[0.02] px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-slate-500 md:inline-flex">
           {selectedProjectLabel}
         </span>
+
+        {/* CSV Export Button */}
+        <button
+          type="button"
+          onClick={() => onExportCsv?.()}
+          disabled={!onExportCsv}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-lg border border-neutral-border bg-white/[0.02] px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-white/[0.05]",
+            !onExportCsv && "pointer-events-none opacity-50",
+          )}
+          title="Export as CSV"
+        >
+          <Download className="size-4" />
+          Export
+        </button>
+
         <button
           type="button"
           onClick={() => void onRefresh()}
@@ -99,13 +147,62 @@ export function WorkloadToolbar({
           <RefreshCcw className={cn("size-4", isRefreshing && "animate-spin")} />
           Refresh
         </button>
-        <button
-          type="button"
-          className="rounded-lg border border-neutral-border bg-white/[0.02] p-2 text-slate-400 transition-colors hover:bg-white/[0.05] hover:text-slate-200"
-          aria-label="Workload filters"
-        >
-          <SlidersHorizontal className="size-4" />
-        </button>
+
+        {/* Advanced Workload Level Filter */}
+        <div className="relative" ref={filterRef}>
+          <button
+            type="button"
+            onClick={() => setIsFilterOpen((prev) => !prev)}
+            className={cn(
+              "rounded-lg border p-2 transition-colors",
+              isFilterOpen || workloadLevelFilter !== "all"
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-neutral-border bg-white/[0.02] text-slate-400 hover:bg-white/[0.05] hover:text-slate-200"
+            )}
+            aria-label="Workload level filters"
+          >
+            <SlidersHorizontal className="size-4" />
+          </button>
+
+          {isFilterOpen && (
+            <div className="absolute right-0 top-full mt-2 w-48 rounded-lg border border-neutral-border bg-neutral-surface shadow-xl z-50">
+              <div className="px-3 py-2 border-b border-neutral-border/50">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Workload Level</span>
+              </div>
+              <div className="py-1">
+                {WORKLOAD_LEVEL_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      onWorkloadLevelFilterChange(option.value);
+                      setIsFilterOpen(false);
+                    }}
+                    className={cn(
+                      "flex items-center justify-between w-full px-3 py-2 text-sm transition-colors",
+                      workloadLevelFilter === option.value
+                        ? "bg-primary/10 text-primary"
+                        : "text-slate-300 hover:bg-white/5 hover:text-slate-100"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>{option.label}</span>
+                      {option.value !== "all" && (
+                        <span className={cn(
+                          "rounded-sm px-1.5 py-0.5 text-[10px] font-medium border",
+                          getWorkloadToneClasses(option.value)
+                        )}>
+                          {getWorkloadToneLabel(option.value)}
+                        </span>
+                      )}
+                    </div>
+                    {workloadLevelFilter === option.value && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -16,7 +16,10 @@ import {
   Clock,
   Code,
   Copy,
+  Eye,
+  EyeOff,
   FileText,
+  Globe,
   Hash,
   History,
   Italic,
@@ -26,6 +29,7 @@ import {
   MoreHorizontal,
   RotateCcw,
   Save,
+  Send,
   Share2,
   Star,
   Trash2,
@@ -348,6 +352,206 @@ function HistoryPanel({
   );
 }
 
+// ─── Comments types and helpers ──────────────────────────────────────────────
+
+interface DocComment {
+  id: string;
+  authorName: string;
+  authorInitials: string;
+  content: string;
+  timestamp: string;
+}
+
+function loadDocComments(docId: string): DocComment[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(`docs:comments:${docId}`);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed as DocComment[];
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveDocComments(docId: string, comments: DocComment[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(`docs:comments:${docId}`, JSON.stringify(comments));
+  } catch {
+    // ignore
+  }
+}
+
+// ─── Comments panel ──────────────────────────────────────────────────────────
+
+function CommentsPanel({
+  docId,
+  authorName,
+  onClose,
+}: {
+  docId: string;
+  authorName: string;
+  onClose: () => void;
+}) {
+  const [comments, setComments] = useState<DocComment[]>(() => loadDocComments(docId));
+  const [newComment, setNewComment] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Reload comments when docId changes
+  useEffect(() => {
+    setComments(loadDocComments(docId));
+  }, [docId]);
+
+  // Persist comments whenever they change
+  useEffect(() => {
+    saveDocComments(docId, comments);
+  }, [docId, comments]);
+
+  const handleSubmit = () => {
+    const trimmed = newComment.trim();
+    if (!trimmed) return;
+
+    const initials = authorName
+      .split(" ")
+      .map((p) => p[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
+
+    const comment: DocComment = {
+      id: `cmt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      authorName,
+      authorInitials: initials,
+      content: trimmed,
+      timestamp: new Date().toISOString(),
+    };
+
+    setComments((prev) => [...prev, comment]);
+    setNewComment("");
+
+    // Scroll to bottom after adding
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }, 50);
+  };
+
+  const handleDelete = (commentId: string) => {
+    setComments((prev) => prev.filter((c) => c.id !== commentId));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ x: "100%", opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      exit={{ x: "100%", opacity: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-neutral-border bg-zinc-900 shadow-2xl"
+    >
+      <div className="flex items-center justify-between border-b border-neutral-border/50 px-4 py-3">
+        <div className="flex items-center gap-2 text-slate-200">
+          <MessageSquare className="h-4 w-4 text-primary" />
+          <span className="font-semibold text-sm">Comments</span>
+          {comments.length > 0 && (
+            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+              {comments.length}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md p-1 text-slate-500 transition-colors hover:text-slate-200"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {comments.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center px-6 text-center">
+          <div>
+            <MessageSquare className="mx-auto mb-3 h-8 w-8 text-slate-600" />
+            <p className="text-sm text-slate-500">No comments yet.</p>
+            <p className="mt-1 text-xs text-slate-600">
+              Start a conversation about this document.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div ref={scrollRef} className="custom-scrollbar flex-1 overflow-y-auto py-3">
+          {comments.map((comment) => (
+            <div key={comment.id} className="group px-3 mb-2">
+              <div className="rounded-lg border border-neutral-border/60 bg-white/3 p-3 transition-colors hover:bg-white/5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[9px] font-bold text-primary">
+                      {comment.authorInitials}
+                    </div>
+                    <div>
+                      <span className="text-xs font-medium text-slate-200">{comment.authorName}</span>
+                      <div className="text-[10px] text-slate-600">
+                        {new Intl.DateTimeFormat("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        }).format(new Date(comment.timestamp))}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(comment.id)}
+                    className="rounded p-0.5 text-slate-600 opacity-0 transition-all group-hover:opacity-100 hover:text-red-400"
+                    title="Delete comment"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-slate-300 whitespace-pre-wrap">
+                  {comment.content}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add comment form */}
+      <div className="border-t border-neutral-border/50 p-3">
+        <div className="flex items-end gap-2">
+          <textarea
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Write a comment..."
+            rows={2}
+            className="flex-1 rounded-lg border border-neutral-border/70 bg-neutral-surface px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-colors focus:border-primary/50 focus:ring-1 focus:ring-primary/40 resize-none"
+          />
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!newComment.trim()}
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+            title="Send comment"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="mt-1.5 text-[10px] text-slate-600">Press Enter to send, Shift+Enter for new line</p>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Move-to-folder dropdown ──────────────────────────────────────────────────
 
 function FolderDropdown({
@@ -411,8 +615,10 @@ export function DocsEditor({
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const [showFolderDropdown, setShowFolderDropdown] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [isTogglingPublish, setIsTogglingPublish] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const folderDropdownRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -487,6 +693,34 @@ export function DocsEditor({
     setShowHistory(false);
   };
 
+  const handleTogglePublish = async () => {
+    const newPublished = !doc.isPublished;
+
+    // If unpublishing, require confirmation
+    if (doc.isPublished) {
+      const confirmed = window.confirm(
+        "Unpublish this document? It will revert to draft status and may no longer be visible to viewers."
+      );
+      if (!confirmed) return;
+    }
+
+    setIsTogglingPublish(true);
+    try {
+      await onSave(doc.id, {
+        title: draftTitle,
+        content: draftContent.trim() ? draftContent : null,
+        contentFormat: doc.contentFormat || "plain-text",
+        projectId: doc.projectId ?? null,
+        parentDocumentId: doc.parentDocumentId ?? null,
+        isPublished: newPublished,
+        sortOrder: doc.sortOrder,
+      });
+      setLastSavedAt(new Date());
+    } finally {
+      setIsTogglingPublish(false);
+    }
+  };
+
   // Insert formatting prefix into textarea
   const insertFormat = (prefix: string, suffix = "") => {
     const textarea = document.querySelector<HTMLTextAreaElement>("#doc-content-textarea");
@@ -540,9 +774,29 @@ export function DocsEditor({
           <span className="cursor-pointer transition-colors hover:text-slate-200">Documents</span>
           <span>/</span>
           <span className="max-w-[200px] truncate font-medium text-slate-200">{doc.title}</span>
-          <span className="ml-1 rounded-full border border-neutral-border/70 bg-white/3 px-2 py-0.5 text-[11px] uppercase tracking-wide text-slate-500">
+          {/* Status badge with publish toggle */}
+          <button
+            type="button"
+            onClick={() => void handleTogglePublish()}
+            disabled={isTogglingPublish || isSaving}
+            title={doc.isPublished ? "Click to unpublish (revert to draft)" : "Click to publish"}
+            className={cn(
+              "ml-1 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-wide transition-colors",
+              doc.isPublished
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                : "border-neutral-border/70 bg-white/3 text-slate-500 hover:bg-white/8 hover:text-slate-300",
+              (isTogglingPublish || isSaving) && "opacity-60 cursor-not-allowed",
+            )}
+          >
+            {isTogglingPublish ? (
+              <span className="text-[11px]">...</span>
+            ) : doc.isPublished ? (
+              <Globe className="h-3 w-3" />
+            ) : (
+              <EyeOff className="h-3 w-3" />
+            )}
             {getDocumentStatusLabel(doc)}
-          </span>
+          </button>
           {/* Folder badge */}
           <div className="relative" ref={folderDropdownRef}>
             <button
@@ -576,11 +830,20 @@ export function DocsEditor({
             </div>
           </div>
 
-          {/* Comments — visually enabled but placeholder */}
+          {/* Comments */}
           <button
             type="button"
-            title="Comments (coming soon)"
-            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/8 hover:text-slate-200"
+            title="Comments"
+            onClick={() => {
+              setShowComments((v) => !v);
+              if (!showComments) setShowHistory(false);
+            }}
+            className={cn(
+              "rounded-md p-1.5 transition-colors",
+              showComments
+                ? "bg-primary/15 text-primary"
+                : "text-slate-400 hover:bg-white/8 hover:text-slate-200",
+            )}
           >
             <MessageSquare className="h-4 w-4" />
           </button>
@@ -609,7 +872,10 @@ export function DocsEditor({
           <button
             type="button"
             title="Revision history"
-            onClick={() => setShowHistory((v) => !v)}
+            onClick={() => {
+              setShowHistory((v) => !v);
+              if (!showHistory) setShowComments(false);
+            }}
             className={cn(
               "rounded-md p-1.5 transition-colors",
               showHistory
@@ -843,6 +1109,17 @@ export function DocsEditor({
             revisions={revisions}
             onRestore={handleRestoreRevision}
             onClose={() => setShowHistory(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Comments panel (absolute overlay on right side) */}
+      <AnimatePresence>
+        {showComments && (
+          <CommentsPanel
+            docId={doc.id}
+            authorName={doc.creator.fullName}
+            onClose={() => setShowComments(false)}
           />
         )}
       </AnimatePresence>

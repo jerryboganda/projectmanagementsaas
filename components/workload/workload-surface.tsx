@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { motion } from "motion/react";
 import {
   Activity,
@@ -80,9 +81,11 @@ export function WorkloadSurface({ members, selectedMemberId, onMemberSelect, tas
                   <div className="flex items-start gap-3">
                     <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.04] text-sm font-semibold text-slate-100">
                       {member.avatarUrl ? (
-                        <img
+                        <Image
                           src={member.avatarUrl}
                           alt={member.fullName}
+                          width={44}
+                          height={44}
                           className="size-full object-cover"
                         />
                       ) : (

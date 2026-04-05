@@ -120,7 +120,13 @@ export default function Dashboard() {
           </div>
 
           {/* Footer Stats */}
-          <FooterStats />
+          <FooterStats
+            projectCount={dashboardData?.footerStats.projectCount}
+            completedTasks={dashboardData?.footerStats.completedTasks}
+            activeMembers={dashboardData?.footerStats.activeMembers}
+            totalMembers={dashboardData?.footerStats.totalMembers}
+            teamCapacity={dashboardData?.footerStats.teamCapacity}
+          />
           </ErrorBoundary>
         </div>
       </main>

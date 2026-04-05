@@ -1,7 +1,13 @@
 "use client";
 
-import { type ElementType, useMemo, useState } from "react";
+import { type ElementType, useCallback, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  type DropResult,
+} from "@hello-pangea/dnd";
 import {
   ArrowRight,
   CalendarDays,
@@ -11,13 +17,17 @@ import {
   Flame,
   ListTodo,
   Package,
+  Pencil,
   Plus,
   Target,
+  Trash2,
   X,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
-import { useSprintsData, type LiveSprintTask } from "@/hooks/use-sprints-data";
-import type { CreateSprintRequest } from "@/lib/api/contracts";
+import { useSprintsData, type LiveSprintTask, type LiveSprint } from "@/hooks/use-sprints-data";
+import type { CreateSprintRequest, UpdateSprintRequest } from "@/lib/api/contracts";
+import type { BoardTaskStatus } from "@/components/board/types";
 
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString("en-US", {
@@ -148,6 +158,7 @@ function SprintColumn({
   title,
   icon: Icon,
   tasks,
+  droppableId,
   actionLabel,
   onTaskAction,
   onTaskAdvance,
@@ -155,6 +166,7 @@ function SprintColumn({
   title: string;
   icon: ElementType;
   tasks: LiveSprintTask[];
+  droppableId: string;
   actionLabel?: string;
   onTaskAction?: (taskId: string) => void;
   onTaskAdvance?: (taskId: string) => void;
@@ -170,23 +182,45 @@ function SprintColumn({
           {tasks.length}
         </span>
       </div>
-      <div className="space-y-2">
-        {tasks.length === 0 ? (
-          <div className="rounded-sm border border-dashed border-neutral-border px-3 py-8 text-center text-[12px] text-slate-600">
-            No tasks
+      <Droppable droppableId={droppableId}>
+        {(provided, snapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+            className={cn(
+              "min-h-[60px] space-y-2 rounded-sm p-1 transition-colors",
+              snapshot.isDraggingOver && "bg-primary/5 ring-1 ring-primary/20",
+            )}
+          >
+            {tasks.length === 0 && !snapshot.isDraggingOver ? (
+              <div className="rounded-sm border border-dashed border-neutral-border px-3 py-8 text-center text-[12px] text-slate-600">
+                No tasks
+              </div>
+            ) : (
+              tasks.map((task, index) => (
+                <Draggable key={task.id} draggableId={task.id} index={index}>
+                  {(dragProvided, dragSnapshot) => (
+                    <div
+                      ref={dragProvided.innerRef}
+                      {...dragProvided.draggableProps}
+                      {...dragProvided.dragHandleProps}
+                      className={cn(dragSnapshot.isDragging && "opacity-90 shadow-lg")}
+                    >
+                      <TaskCard
+                        task={task}
+                        actionLabel={actionLabel}
+                        onAction={onTaskAction ? () => onTaskAction(task.id) : undefined}
+                        onAdvance={onTaskAdvance ? () => onTaskAdvance(task.id) : undefined}
+                      />
+                    </div>
+                  )}
+                </Draggable>
+              ))
+            )}
+            {provided.placeholder}
           </div>
-        ) : (
-          tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              actionLabel={actionLabel}
-              onAction={onTaskAction ? () => onTaskAction(task.id) : undefined}
-              onAdvance={onTaskAdvance ? () => onTaskAdvance(task.id) : undefined}
-            />
-          ))
         )}
-      </div>
+      </Droppable>
     </div>
   );
 }
@@ -321,8 +355,192 @@ function CreateSprintModal({
   );
 }
 
+function EditSprintModal({
+  sprint,
+  isSubmitting,
+  onClose,
+  onSave,
+}: {
+  sprint: LiveSprint;
+  isSubmitting: boolean;
+  onClose: () => void;
+  onSave: (input: UpdateSprintRequest) => Promise<void>;
+}) {
+  const [name, setName] = useState(sprint.name);
+  const [goal, setGoal] = useState(sprint.goalDescription ?? "");
+  const [startDate, setStartDate] = useState(sprint.startDate.slice(0, 10));
+  const [endDate, setEndDate] = useState(sprint.endDate.slice(0, 10));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        className="w-full max-w-md rounded-sm border border-neutral-border bg-neutral-surface shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-neutral-border px-5 py-4">
+          <h3 className="text-sm font-semibold text-slate-100">Edit Sprint</h3>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <form
+          className="space-y-4 p-5"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!name.trim()) return;
+            await onSave({
+              name: name.trim(),
+              goal: goal.trim() || null,
+              startDate,
+              endDate,
+            });
+            onClose();
+          }}
+        >
+          <div>
+            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              Sprint Name
+            </label>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="h-9 w-full rounded-sm border border-neutral-border bg-slate-800/50 px-3 text-[13px] text-slate-200 outline-none transition-colors focus:border-primary"
+              placeholder="Sprint 27"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              Goal
+            </label>
+            <textarea
+              value={goal}
+              onChange={(event) => setGoal(event.target.value)}
+              rows={3}
+              className="w-full rounded-sm border border-neutral-border bg-slate-800/50 px-3 py-2 text-[13px] text-slate-200 outline-none transition-colors focus:border-primary"
+              placeholder="What should this sprint accomplish?"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+                className="h-9 w-full rounded-sm border border-neutral-border bg-slate-800/50 px-3 text-[13px] text-slate-200 outline-none transition-colors focus:border-primary [color-scheme:dark]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                className="h-9 w-full rounded-sm border border-neutral-border bg-slate-800/50 px-3 text-[13px] text-slate-200 outline-none transition-colors focus:border-primary [color-scheme:dark]"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 rounded-sm border border-neutral-border px-4 text-[12px] font-medium text-slate-400 transition-colors hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!name.trim() || isSubmitting}
+              className="h-8 rounded-sm bg-primary px-4 text-[12px] font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function DeleteSprintDialog({
+  sprintName,
+  isDeleting,
+  onClose,
+  onConfirm,
+}: {
+  sprintName: string;
+  isDeleting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        className="w-full max-w-sm rounded-sm border border-neutral-border bg-neutral-surface shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-neutral-border px-5 py-4">
+          <h3 className="text-sm font-semibold text-slate-100">Delete Sprint</h3>
+          <button type="button" onClick={onClose} className="text-slate-500 hover:text-slate-300">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="p-5">
+          <p className="text-[13px] text-slate-300">
+            Are you sure you want to delete <span className="font-semibold text-slate-100">{sprintName}</span>?
+            This will remove the sprint and unassign all tasks.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 rounded-sm border border-neutral-border px-4 text-[12px] font-medium text-slate-400 transition-colors hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={isDeleting}
+              className="h-8 rounded-sm bg-rose-600 px-4 text-[12px] font-medium text-white transition-colors hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isDeleting ? "Deleting..." : "Delete Sprint"}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export function SprintsLayout() {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [backlogSearch, setBacklogSearch] = useState("");
   const {
     projects,
@@ -340,13 +558,17 @@ export function SprintsLayout() {
     sprintStats,
     progressPct,
     createSprint,
+    updateSprint,
     startSprint,
     completeSprint,
+    deleteSprint,
     moveTaskToSprint,
     updateTaskStatus,
     isCreatingSprint,
+    isUpdatingSprint,
     isStartingSprint,
     isCompletingSprint,
+    isDeletingSprint,
     isMovingTask,
     isUpdatingTaskStatus,
     isLoadingProjects,
@@ -367,6 +589,26 @@ export function SprintsLayout() {
         task.identifier.toLowerCase().includes(query),
     );
   }, [backlogSearch, backlogTasks]);
+
+  const handleDragEnd = useCallback(
+    (result: DropResult) => {
+      const { destination, source, draggableId } = result;
+      if (!destination) return;
+      if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+
+      const statusMap: Record<string, BoardTaskStatus> = {
+        "column-todo": "To Do",
+        "column-inprogress": "In Progress",
+        "column-done": "Done",
+      };
+
+      const newStatus = statusMap[destination.droppableId];
+      if (!newStatus) return;
+
+      void updateTaskStatus(draggableId, newStatus);
+    },
+    [updateTaskStatus],
+  );
 
   const surfaceError = projectsError ?? sprintsError ?? tasksError ?? actionError;
 
@@ -511,6 +753,22 @@ export function SprintsLayout() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(true)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-neutral-border bg-white/[0.03] px-3 text-[12px] font-medium text-slate-300 transition-colors hover:bg-white/[0.06]"
+                  >
+                    <Pencil className="size-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteDialog(true)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-rose-500/20 bg-rose-500/10 px-3 text-[12px] font-medium text-rose-400 transition-colors hover:bg-rose-500/20"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </button>
                   {selectedSprint.status === "planning" ? (
                     <button
                       type="button"
@@ -560,31 +818,36 @@ export function SprintsLayout() {
               </div>
             ) : null}
 
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-              <SprintColumn
-                title="To Do"
-                icon={Circle}
-                tasks={todoTasks}
-                actionLabel="Remove"
-                onTaskAction={(taskId) => void moveTaskToSprint(taskId, null)}
-                onTaskAdvance={(taskId) => void updateTaskStatus(taskId, "In Progress")}
-              />
-              <SprintColumn
-                title="In Progress"
-                icon={Clock}
-                tasks={inProgressTasks}
-                actionLabel="Remove"
-                onTaskAction={(taskId) => void moveTaskToSprint(taskId, null)}
-                onTaskAdvance={(taskId) => void updateTaskStatus(taskId, "Done")}
-              />
-              <SprintColumn
-                title="Done"
-                icon={CheckCircle2}
-                tasks={doneTasks}
-                actionLabel="Remove"
-                onTaskAction={(taskId) => void moveTaskToSprint(taskId, null)}
-              />
-            </div>
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <SprintColumn
+                  title="To Do"
+                  icon={Circle}
+                  tasks={todoTasks}
+                  droppableId="column-todo"
+                  actionLabel="Remove"
+                  onTaskAction={(taskId) => void moveTaskToSprint(taskId, null)}
+                  onTaskAdvance={(taskId) => void updateTaskStatus(taskId, "In Progress")}
+                />
+                <SprintColumn
+                  title="In Progress"
+                  icon={Clock}
+                  tasks={inProgressTasks}
+                  droppableId="column-inprogress"
+                  actionLabel="Remove"
+                  onTaskAction={(taskId) => void moveTaskToSprint(taskId, null)}
+                  onTaskAdvance={(taskId) => void updateTaskStatus(taskId, "Done")}
+                />
+                <SprintColumn
+                  title="Done"
+                  icon={CheckCircle2}
+                  tasks={doneTasks}
+                  droppableId="column-done"
+                  actionLabel="Remove"
+                  onTaskAction={(taskId) => void moveTaskToSprint(taskId, null)}
+                />
+              </div>
+            </DragDropContext>
 
             <div className="rounded-sm border border-neutral-border bg-neutral-surface">
               <div className="flex flex-col gap-3 border-b border-neutral-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -644,6 +907,28 @@ export function SprintsLayout() {
             onClose={() => setShowCreateModal(false)}
             onCreate={async (input) => {
               await createSprint(input);
+            }}
+          />
+        ) : null}
+        {showEditModal && selectedSprint ? (
+          <EditSprintModal
+            sprint={selectedSprint}
+            isSubmitting={isUpdatingSprint}
+            onClose={() => setShowEditModal(false)}
+            onSave={async (input) => {
+              await updateSprint(selectedSprint.id, input);
+            }}
+          />
+        ) : null}
+        {showDeleteDialog && selectedSprint ? (
+          <DeleteSprintDialog
+            sprintName={selectedSprint.name}
+            isDeleting={isDeletingSprint}
+            onClose={() => setShowDeleteDialog(false)}
+            onConfirm={() => {
+              void deleteSprint(selectedSprint.id).then(() => {
+                setShowDeleteDialog(false);
+              });
             }}
           />
         ) : null}

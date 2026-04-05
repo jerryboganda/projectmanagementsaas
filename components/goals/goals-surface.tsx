@@ -11,6 +11,7 @@ import {
   Target,
   XCircle,
 } from "lucide-react";
+import Image from "next/image";
 import clsx from "clsx";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -192,7 +193,7 @@ export function GoalsSurface({ data, selectedGoalId, onGoalSelect }: Props) {
           <div className="w-[180px] shrink-0 p-3 flex items-center gap-2">
             <div className="size-6 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-medium text-primary border border-primary/30 overflow-hidden shrink-0">
               {item.owner?.avatarUrl ? (
-                <img src={item.owner.avatarUrl} alt={item.owner.fullName} className="w-full h-full object-cover" />
+                <Image src={item.owner.avatarUrl} alt={item.owner.fullName} width={24} height={24} className="w-full h-full object-cover" />
               ) : (
                 item.owner?.fullName
                   ?.split(" ")

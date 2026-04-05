@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { CheckCircle2, Link as LinkIcon, Loader2, MoreHorizontal, Plus, Target, Trash2, X } from "lucide-react";
+import { CheckCircle2, Link as LinkIcon, Loader2, MoreHorizontal, Pencil, Plus, Target, Trash2, Unlink, X } from "lucide-react";
 import clsx from "clsx";
 import type {
   GoalInitiativeCreateInput,
   GoalInitiativeSurfaceStatus,
+  GoalInitiativeUpdateInput,
   GoalSurfaceItem,
   GoalSurfaceStatus,
   GoalSurfaceType,
@@ -49,12 +50,18 @@ interface Props {
   onSave: (input: GoalUpdateInput) => Promise<void>;
   onDelete: () => Promise<void>;
   onLinkProject: (projectId: string) => Promise<void>;
+  onUnlinkProject: (projectId: string) => Promise<void>;
   onCreateInitiative: (input: GoalInitiativeCreateInput) => Promise<void>;
+  onUpdateInitiative: (initiativeId: string, input: GoalInitiativeUpdateInput) => Promise<void>;
+  onDeleteInitiative: (initiativeId: string) => Promise<void>;
   onCreateSubGoal: () => void;
   isSaving?: boolean;
   isDeleting?: boolean;
   isLinkingProject?: boolean;
+  isUnlinkingProject?: boolean;
   isCreatingInitiative?: boolean;
+  isUpdatingInitiative?: boolean;
+  isDeletingInitiative?: boolean;
 }
 
 const statusOptions = [
@@ -119,12 +126,18 @@ export function GoalsDetail({
   onSave,
   onDelete,
   onLinkProject,
+  onUnlinkProject,
   onCreateInitiative,
+  onUpdateInitiative,
+  onDeleteInitiative,
   onCreateSubGoal,
   isSaving = false,
   isDeleting = false,
   isLinkingProject = false,
+  isUnlinkingProject = false,
   isCreatingInitiative = false,
+  isUpdatingInitiative = false,
+  isDeletingInitiative = false,
 }: Props) {
   const [title, setTitle] = useState(goal.title);
   const [description, setDescription] = useState(goal.description ?? "");
@@ -144,6 +157,10 @@ export function GoalsDetail({
   const [initiativeStartDate, setInitiativeStartDate] = useState("");
   const [initiativeTargetDate, setInitiativeTargetDate] = useState("");
   const [initiativeProgress, setInitiativeProgress] = useState("0");
+  const [editingInitiativeId, setEditingInitiativeId] = useState<string | null>(null);
+  const [editInitiativeTitle, setEditInitiativeTitle] = useState("");
+  const [editInitiativeStatus, setEditInitiativeStatus] = useState<GoalInitiativeSurfaceStatus>("Planned");
+  const [deletingInitiativeId, setDeletingInitiativeId] = useState<string | null>(null);
 
   const linkedProjectIds = useMemo(
     () => new Set(goal.linkedProjects.map((project) => project.id)),
@@ -421,7 +438,7 @@ export function GoalsDetail({
               goal.linkedProjects.map((project) => (
                 <div
                   key={project.id}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-neutral-border bg-white/[0.02]"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-neutral-border bg-white/[0.02] group"
                 >
                   <div className="size-5 rounded-sm bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
                     <Target className="size-3 text-primary" />
@@ -432,6 +449,19 @@ export function GoalsDetail({
                       {project.status}
                     </span>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Unlink "${project.name}" from this goal?`)) {
+                        void onUnlinkProject(project.id);
+                      }
+                    }}
+                    disabled={isUnlinkingProject}
+                    className="ml-1 p-0.5 rounded-sm text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                    title="Unlink project"
+                  >
+                    <X className="size-3" />
+                  </button>
                 </div>
               ))
             ) : (
@@ -584,30 +614,134 @@ export function GoalsDetail({
             {goal.initiatives.length > 0 ? (
               goal.initiatives.map((initiative) => (
                 <div key={initiative.id} className="p-3 rounded-md border border-neutral-border bg-white/[0.02] flex flex-col gap-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="text-[13px] font-medium text-slate-200">{initiative.title}</div>
-                      {initiative.description ? <p className="text-[12px] text-slate-500">{initiative.description}</p> : null}
+                  {editingInitiativeId === initiative.id ? (
+                    <div className="space-y-3">
+                      <input
+                        value={editInitiativeTitle}
+                        onChange={(event) => setEditInitiativeTitle(event.target.value)}
+                        className="w-full bg-transparent border border-neutral-border rounded-sm px-3 py-2 text-[13px] text-slate-200 focus:outline-none focus:border-primary"
+                        placeholder="Initiative title"
+                        autoFocus
+                      />
+                      <select
+                        value={editInitiativeStatus}
+                        onChange={(event) =>
+                          setEditInitiativeStatus(event.target.value as GoalInitiativeSurfaceStatus)
+                        }
+                        className="w-full bg-transparent border border-neutral-border rounded-sm px-3 py-2 text-[13px] text-slate-200 focus:outline-none focus:border-primary"
+                      >
+                        {initiativeStatusOptions.map((option) => (
+                          <option key={option.value} value={option.value} className="bg-neutral-surface text-slate-200">
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingInitiativeId(null)}
+                          className="h-7 px-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-neutral-border rounded-sm text-[11px] font-medium text-slate-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!editInitiativeTitle.trim()) return;
+                            void onUpdateInitiative(initiative.id, {
+                              title: editInitiativeTitle.trim(),
+                              description: initiative.description ?? null,
+                              status: editInitiativeStatus,
+                              ownerId: initiative.owner?.id ?? null,
+                              startDate: initiative.startDate ?? null,
+                              targetDate: initiative.targetDate ?? null,
+                              progressPercent: initiative.progress,
+                            }).then(() => setEditingInitiativeId(null));
+                          }}
+                          disabled={isUpdatingInitiative || !editInitiativeTitle.trim()}
+                          className="h-7 px-2.5 bg-primary hover:bg-primary/90 border border-primary rounded-sm text-[11px] font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                        >
+                          {isUpdatingInitiative ? <Loader2 className="size-3 animate-spin" /> : null}
+                          Save
+                        </button>
+                      </div>
                     </div>
-                    <span
-                      className={clsx(
-                        "px-2 py-0.5 rounded-sm border text-[10px] font-medium uppercase tracking-wider",
-                        getInitiativeStatusColor(initiative.status),
-                      )}
-                    >
-                      {formatGoalStatus(initiative.status)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <div className="flex items-center gap-3">
-                      <span>{initiative.owner?.fullName ?? "Unassigned"}</span>
-                      <span>{initiative.progress}% complete</span>
+                  ) : deletingInitiativeId === initiative.id ? (
+                    <div className="space-y-3">
+                      <p className="text-[12px] text-slate-300">
+                        Delete <span className="font-semibold text-slate-100">{initiative.title}</span>? This cannot be undone.
+                      </p>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeletingInitiativeId(null)}
+                          className="h-7 px-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-neutral-border rounded-sm text-[11px] font-medium text-slate-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void onDeleteInitiative(initiative.id).then(() => setDeletingInitiativeId(null));
+                          }}
+                          disabled={isDeletingInitiative}
+                          className="h-7 px-2.5 bg-rose-600 hover:bg-rose-500 rounded-sm text-[11px] font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                        >
+                          {isDeletingInitiative ? <Loader2 className="size-3 animate-spin" /> : null}
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {initiative.startDate ? <span>Start {initiative.startDate}</span> : null}
-                      {initiative.targetDate ? <span>Target {initiative.targetDate}</span> : null}
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <div className="text-[13px] font-medium text-slate-200">{initiative.title}</div>
+                          {initiative.description ? <p className="text-[12px] text-slate-500">{initiative.description}</p> : null}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingInitiativeId(initiative.id);
+                              setEditInitiativeTitle(initiative.title);
+                              setEditInitiativeStatus(initiative.status);
+                            }}
+                            className="p-1 rounded-sm text-slate-500 hover:text-slate-200 hover:bg-white/[0.05] transition-colors"
+                            title="Edit initiative"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingInitiativeId(initiative.id)}
+                            className="p-1 rounded-sm text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                            title="Delete initiative"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                          <span
+                            className={clsx(
+                              "px-2 py-0.5 rounded-sm border text-[10px] font-medium uppercase tracking-wider ml-1",
+                              getInitiativeStatusColor(initiative.status),
+                            )}
+                          >
+                            {formatGoalStatus(initiative.status)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-500">
+                        <div className="flex items-center gap-3">
+                          <span>{initiative.owner?.fullName ?? "Unassigned"}</span>
+                          <span>{initiative.progress}% complete</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {initiative.startDate ? <span>Start {initiative.startDate}</span> : null}
+                          {initiative.targetDate ? <span>Target {initiative.targetDate}</span> : null}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))
             ) : (

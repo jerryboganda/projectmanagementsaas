@@ -40,6 +40,22 @@ This repository is a mixed PM SaaS codebase:
 - Existing raw `<img>` warnings are accepted prototype debt for now.
 - Lint blockers must be fixed before task completion.
 
+## Agentic OS Autonomy & Auto-Use Policy
+ANY operating AI Agent MUST adhere to the Universal Operating Mandate:
+- **Skill Usage:** If a relevant installed skill (listed in `docs/agent-skills.md` or found in `.codex/skills/` / `.agents/skills/`) applies to a task, the agent MUST auto-use it without asking for permission. 
+- **Subagent Routing:** Large tasks must automatically trigger subagents without asking for permission, utilizing the mandatory target subagent topology below.
+
+## Mandatory Target Subagent Topology
+The orchestration layer defaults to mapping tasks to this specialized topology (which currently map to configurations in `.codex/agents/`):
+- `repo_cartographer`: Architecture and dependency mapping.
+- `skill_scout`: Skill catalog evaluation and routing.
+- `execplan_strategist`: Cross-layer phase planning.
+- `frontend_owner`: Specialized Next.js component UI work.
+- `backend_owner`: Specialized ASP.NET Core logic and model work.
+- `qa_validator`: Verification regression checking and test running.
+- `api_contract_guard`: Validates changes bridging frontend mock interfaces and backend DTOs.
+- `docs_researcher`: Gathers authoritative platform constraints.
+
 ## Subagent Policy
 - Default to discovery before medium or large changes.
 - Use one write agent per isolated ownership boundary.

@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { motion } from 'motion/react';
 import { 
   X, 
@@ -89,7 +90,7 @@ export function ReportsDetailPanel({ project, onClose, onOpenProject }: ReportsD
               <span className="text-slate-500">Owner:</span>
               <div className="flex items-center gap-1.5">
                 {project.owner.avatar ? (
-                  <img src={project.owner.avatar} alt={project.owner.name} className="w-5 h-5 rounded-full" />
+                  <Image src={project.owner.avatar} alt={project.owner.name} width={20} height={20} className="w-5 h-5 rounded-full" />
                 ) : (
                   <div className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
                     {project.owner.initials}

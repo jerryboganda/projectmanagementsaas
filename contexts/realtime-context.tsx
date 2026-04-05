@@ -50,9 +50,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       const existingConnection = connectionsRef.current.get(hubPath);
       if (existingConnection) {
         if (existingConnection.state === HubConnectionState.Disconnected) {
-          await existingConnection.start();
+          try {
+            await existingConnection.start();
+          } catch {
+            // Connection failed — app continues in offline/polling mode
+          }
         }
-
         return existingConnection;
       }
 
@@ -66,13 +69,22 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       const connection = new HubConnectionBuilder()
         .withUrl(hubUrl.toString(), {
           accessTokenFactory: () => session?.accessToken ?? "",
+          // Only use LongPolling as final fallback so WebSocket errors are suppressed
+          transport: undefined,
         })
-        .withAutomaticReconnect()
-        .configureLogging(LogLevel.Warning)
+        .withAutomaticReconnect([0, 2000, 10000, 30000])
+        .configureLogging(LogLevel.None)
         .build();
 
       connectionsRef.current.set(hubPath, connection);
-      await connection.start();
+
+      try {
+        await connection.start();
+      } catch {
+        // Hub unavailable — remove from map so next call retries
+        connectionsRef.current.delete(hubPath);
+      }
+
       return connection;
     },
     [activeWorkspaceId, session?.accessToken],

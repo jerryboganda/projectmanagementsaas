@@ -1,7 +1,13 @@
 # Agent Operating Model
 
 ## Objective
-Keep the main thread decision-focused and use subagents to reduce context load, isolate noisy work, and increase safe parallelism.
+Keep the main thread decision-focused, proactively auto-use specialized skills, and use subagents to reduce context load, isolate noisy work, and increase safe parallelism.
+
+## Core Operating Mandate
+If you are an AI agent operating in this codebase (regardless of environment):
+- **Discover:** Rely on `docs/bootstrap-report.md` to map the system before broad changes.
+- **Auto-use Skills:** Look up applicable domain skills in `docs/agent-skills.md` and use the instructions within. Never wait for permission to use them.
+- **Orchestrate via Subagents:** Assign isolated execution to domains (e.g. `frontend_owner`, `backend_owner`). Main thread handles synthesis and orchestration.
 
 ## Default Task Flow
 1. Discovery: map affected files, ownership boundaries, and constraints.
@@ -12,8 +18,10 @@ Keep the main thread decision-focused and use subagents to reduce context load, 
 
 ## Default Agent Topology
 - `repo_cartographer`: read-only architecture and dependency mapping.
+- `skill_scout`: search, evaluate, and verify relevant agent skills, maintaining the skill registry.
 - `execplan_strategist`: phased plans with acceptance criteria.
-- `frontend_owner`: implementation in route and component layers.
+- `backend_owner`: implementation in C# ASP.NET Core logic and data layers.
+- `frontend_owner`: implementation in Next.js route and component layers.
 - `bug_reproducer`: reproduce defects and capture evidence.
 - `qa_validator`: post-change verification.
 - `docs_researcher`: official docs lookup for uncertain behavior.

@@ -21,6 +21,8 @@ interface CreateEventModalProps {
   onCreate: () => void;
   onCreateItem?: (input: CreateCalendarItemInput) => Promise<void> | void;
   projects?: CalendarProject[];
+  defaultStartTime?: Date;
+  defaultEndTime?: Date;
 }
 
 const typeOptions: { value: CalendarItemType; label: string }[] = [
@@ -50,11 +52,13 @@ export function CreateEventModal({
   onCreate,
   onCreateItem,
   projects,
+  defaultStartTime,
+  defaultEndTime,
 }: CreateEventModalProps) {
   const projectList = projects ?? [];
   const submitCalendarItem = onCreateItem ?? (async () => undefined);
-  const now = new Date();
-  const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+  const now = defaultStartTime ?? new Date();
+  const oneHourLater = defaultEndTime ?? new Date(now.getTime() + 60 * 60 * 1000);
 
   const [title, setTitle] = useState("");
   const [type, setType] = useState<CalendarItemType>("Event");

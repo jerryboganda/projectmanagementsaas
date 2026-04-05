@@ -28,6 +28,7 @@ import { BillingPanel } from './billing-panel';
 import { SecurityPanel } from './security-panel';
 import { IntegrationsPanel } from './integrations-panel';
 import { AppearancePanel } from './appearance-panel';
+import { TeamsPanel } from './teams-panel';
 
 interface SettingsContentProps {
   activeCategory: SettingsCategory;
@@ -639,7 +640,7 @@ export function SettingsContent({ activeCategory }: SettingsContentProps) {
     case 'security':
       return <SecurityPanel />;
     case 'teams':
-      return <PlaceholderPanel title="Teams" description="Teams still need a dedicated backend contract before the Settings surface can manage them honestly." />;
+      return <TeamsPanel />;
     default:
       return <PlaceholderPanel title="Settings" description="Select a category from the sidebar." />;
   }

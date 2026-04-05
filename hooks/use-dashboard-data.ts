@@ -91,6 +91,13 @@ interface DashboardData {
   triage: DashboardTaskItem[];
   projectHealth: DashboardProjectHealthItem[];
   activity: DashboardActivityItem[];
+  footerStats: {
+    projectCount: number;
+    completedTasks: number;
+    activeMembers: number;
+    totalMembers: number;
+    teamCapacity: number;
+  };
 }
 
 export function useDashboardData() {
@@ -211,6 +218,13 @@ export function useDashboardData() {
           }),
           tone: getActivityTone(notification.type),
         })),
+        footerStats: {
+          projectCount: projects.length,
+          completedTasks,
+          activeMembers,
+          totalMembers: workload.members.length,
+          teamCapacity,
+        },
       };
     },
   });

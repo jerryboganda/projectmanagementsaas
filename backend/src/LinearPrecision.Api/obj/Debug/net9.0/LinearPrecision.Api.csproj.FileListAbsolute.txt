@@ -274,3 +274,4 @@ C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\Linear
 C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Api\bin\Debug\net9.0\runtimes\browser\lib\net8.0\System.Text.Encodings.Web.dll
 C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Api\bin\Debug\net9.0\runtimes\win\lib\net9.0\System.Text.Encodings.Web.dll
 C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Api\bin\Debug\net9.0\runtimes\win\lib\net6.0\System.Windows.Extensions.dll
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Api\obj\Debug\net9.0\LinearPrecision.Api.sourcelink.json

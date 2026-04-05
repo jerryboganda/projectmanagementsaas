@@ -19,6 +19,7 @@ export function CalendarLayout() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createModalDefaults, setCreateModalDefaults] = useState<{ start: Date; end: Date } | null>(null);
 
   const {
     items,
@@ -60,6 +61,14 @@ export function CalendarLayout() {
 
   const handleUpdateEvent = async (id: string, updates: UpdateCalendarItemInput) => {
     await updateCalendarItem(id, updates);
+  };
+
+  const handleSlotClick = (date: Date, hour: number) => {
+    const start = new Date(date);
+    start.setHours(hour, 0, 0, 0);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    setCreateModalDefaults({ start, end });
+    setIsCreateModalOpen(true);
   };
 
   const handleDeleteEvent = async (id: string) => {
@@ -115,12 +124,13 @@ export function CalendarLayout() {
             />
           </div>
         ) : (
-          <CalendarSurface 
+          <CalendarSurface
             items={filteredItems}
             currentDate={currentDate}
             viewMode={viewMode}
             selectedItemId={selectedItemId}
             onItemSelect={setSelectedItemId}
+            onSlotClick={handleSlotClick}
             projects={projects}
           />
         )}
@@ -142,11 +152,14 @@ export function CalendarLayout() {
       </div>
 
       <CreateEventModal
+        key={createModalDefaults ? createModalDefaults.start.getTime().toString() : "default"}
         isOpen={isCreateModalOpen}
         projects={projects}
         onCreateItem={handleCreateEvent}
-        onClose={() => setIsCreateModalOpen(false)}
-        onCreate={() => setIsCreateModalOpen(false)}
+        onClose={() => { setIsCreateModalOpen(false); setCreateModalDefaults(null); }}
+        onCreate={() => { setIsCreateModalOpen(false); setCreateModalDefaults(null); }}
+        defaultStartTime={createModalDefaults?.start}
+        defaultEndTime={createModalDefaults?.end}
       />
     </div>
   );

@@ -475,6 +475,18 @@ export class LinearPrecisionApiClient {
     });
   }
 
+  deleteGoalInitiative(goalId: string, initiativeId: string) {
+    return this.request<void>(`/api/v1/goals/${goalId}/initiatives/${initiativeId}`, {
+      method: "DELETE",
+    });
+  }
+
+  unlinkGoalProject(goalId: string, projectId: string) {
+    return this.request<void>(`/api/v1/goals/${goalId}/projects/${projectId}`, {
+      method: "DELETE",
+    });
+  }
+
   listCalendarItems(params: {
     start: string;
     end: string;

@@ -249,6 +249,38 @@ export function useGoalsData(selectedGoalId: string | null) {
     },
   });
 
+  const deleteInitiativeMutation = useMutation({
+    mutationFn: async ({
+      goalId,
+      initiativeId,
+    }: {
+      goalId: string;
+      initiativeId: string;
+    }) => apiClient.deleteGoalInitiative(goalId, initiativeId),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: goalDetailQueryKey(activeWorkspaceId, variables.goalId),
+      });
+      await queryClient.invalidateQueries({ queryKey: goalsQueryKey(activeWorkspaceId) });
+    },
+  });
+
+  const unlinkProjectMutation = useMutation({
+    mutationFn: async ({
+      goalId,
+      projectId,
+    }: {
+      goalId: string;
+      projectId: string;
+    }) => apiClient.unlinkGoalProject(goalId, projectId),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: goalDetailQueryKey(activeWorkspaceId, variables.goalId),
+      });
+      await queryClient.invalidateQueries({ queryKey: goalsQueryKey(activeWorkspaceId) });
+    },
+  });
+
   const projects = useMemo(
     () =>
       (projectsQuery.data ?? []).map((project) => ({
@@ -290,10 +322,16 @@ export function useGoalsData(selectedGoalId: string | null) {
       createInitiativeMutation.mutateAsync({ goalId, input }),
     updateInitiative: async (goalId: string, initiativeId: string, input: GoalInitiativeUpdateInput) =>
       updateInitiativeMutation.mutateAsync({ goalId, initiativeId, input }),
+    deleteInitiative: async (goalId: string, initiativeId: string) =>
+      deleteInitiativeMutation.mutateAsync({ goalId, initiativeId }),
+    unlinkProject: async (goalId: string, projectId: string) =>
+      unlinkProjectMutation.mutateAsync({ goalId, projectId }),
     isSavingGoal: createGoalMutation.isPending || updateGoalMutation.isPending,
     isDeletingGoal: deleteGoalMutation.isPending,
     isLinkingGoalProject: linkProjectMutation.isPending,
     isCreatingInitiative: createInitiativeMutation.isPending,
     isUpdatingInitiative: updateInitiativeMutation.isPending,
+    isDeletingInitiative: deleteInitiativeMutation.isPending,
+    isUnlinkingProject: unlinkProjectMutation.isPending,
   };
 }

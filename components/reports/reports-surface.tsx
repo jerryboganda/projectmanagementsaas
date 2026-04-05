@@ -1,31 +1,37 @@
 'use client';
 
+import { useState } from 'react';
+import Image from 'next/image';
 import { motion } from 'motion/react';
-import { 
-  LineChart, 
-  Line, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
   ResponsiveContainer,
   Area,
   ComposedChart
 } from 'recharts';
-import { 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  Minus, 
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
   Info,
   MoreHorizontal,
   AlertTriangle,
   CheckCircle2,
-  Clock
+  Clock,
+  Target,
+  Wallet,
+  Rocket
 } from 'lucide-react';
-import { ReportData, KPIMetric, ReportProject } from './data';
+import { cn } from '@/lib/utils';
+import { ReportData, KPIMetric, ReportProject, KPI_DESCRIPTIONS, type PlannedReportId } from './data';
 
 interface ReportsSurfaceProps {
   report: ReportData;
@@ -33,7 +39,50 @@ interface ReportsSurfaceProps {
   selectedProjectId?: string;
 }
 
+interface ComingSoonSurfaceProps {
+  reportId: PlannedReportId;
+}
+
+export function ComingSoonSurface({ reportId }: ComingSoonSurfaceProps) {
+  const config: Record<PlannedReportId, { title: string; description: string; icon: typeof Target }> = {
+    goals: {
+      title: 'Goals Report',
+      description: 'Track progress toward team and organizational objectives. Goal alignment, completion rates, and milestone tracking will be available here once the goals module ships.',
+      icon: Target,
+    },
+    financial: {
+      title: 'Financial Report',
+      description: 'Monitor project budgets, cost tracking, and resource allocation spend. Financial analytics will be available here once the billing and budget modules are integrated.',
+      icon: Wallet,
+    },
+  };
+
+  const { title, description, icon: Icon } = config[reportId];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="flex-1 flex items-center justify-center p-6"
+    >
+      <div className="flex flex-col items-center text-center max-w-md">
+        <div className="size-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6">
+          <Icon className="size-8 text-primary" />
+        </div>
+        <h2 className="text-xl font-semibold text-slate-100 mb-3">{title}</h2>
+        <p className="text-sm text-slate-400 leading-relaxed mb-6">{description}</p>
+        <div className="flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-medium text-primary">
+          <Rocket className="w-4 h-4" />
+          Coming Soon
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export function ReportsSurface({ report, onSelectProject, selectedProjectId }: ReportsSurfaceProps) {
+  const [hoveredKpiId, setHoveredKpiId] = useState<string | null>(null);
 
   const renderTrendIcon = (metric: KPIMetric) => {
     if (metric.trend.direction === 'up') return <ArrowUpRight className="w-3.5 h-3.5" />;
@@ -63,7 +112,7 @@ export function ReportsSurface({ report, onSelectProject, selectedProjectId }: R
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
             <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dy={10} />
             <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dx={-10} />
-            <Tooltip 
+            <Tooltip
               contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }}
               itemStyle={{ color: '#e2e8f0' }}
             />
@@ -83,7 +132,7 @@ export function ReportsSurface({ report, onSelectProject, selectedProjectId }: R
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
             <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dy={10} />
             <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dx={-10} />
-            <Tooltip 
+            <Tooltip
               contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }}
             />
             <Legend wrapperStyle={{ paddingTop: '20px' }} />
@@ -130,7 +179,7 @@ export function ReportsSurface({ report, onSelectProject, selectedProjectId }: R
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
@@ -145,7 +194,7 @@ export function ReportsSurface({ report, onSelectProject, selectedProjectId }: R
       {/* KPI Strip */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {report.kpis.map((kpi, i) => (
-          <motion.div 
+          <motion.div
             key={kpi.id}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -154,15 +203,28 @@ export function ReportsSurface({ report, onSelectProject, selectedProjectId }: R
           >
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-slate-400 group-hover:text-slate-300 transition-colors">{kpi.label}</h3>
-              <button className="text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Info className="w-4 h-4" />
-              </button>
+              <div className="relative">
+                <button
+                  className="text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onMouseEnter={() => setHoveredKpiId(kpi.id)}
+                  onMouseLeave={() => setHoveredKpiId(null)}
+                >
+                  <Info className="w-4 h-4" />
+                </button>
+                {hoveredKpiId === kpi.id && KPI_DESCRIPTIONS[kpi.id] && (
+                  <div className="absolute right-0 top-full mt-2 w-64 max-w-xs rounded-lg border border-neutral-border bg-neutral-surface p-3 shadow-xl z-50">
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      {KPI_DESCRIPTIONS[kpi.id]}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex items-end justify-between">
               <div className="text-3xl font-bold text-slate-100 tracking-tight">
                 {formatValue(kpi.value, kpi.format)}
               </div>
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${renderTrendColor(kpi)}`}>
+              <div className={cn("flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium", renderTrendColor(kpi))}>
                 {renderTrendIcon(kpi)}
                 {kpi.trend.value}
               </div>
@@ -198,7 +260,7 @@ export function ReportsSurface({ report, onSelectProject, selectedProjectId }: R
               <span className="text-xs text-slate-400">{report.projects.length} projects</span>
             </div>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-background-dark/50 text-slate-400 border-b border-neutral-border/50">
@@ -213,14 +275,15 @@ export function ReportsSurface({ report, onSelectProject, selectedProjectId }: R
               </thead>
               <tbody className="divide-y divide-neutral-border/50">
                 {report.projects.map((project) => (
-                  <tr 
+                  <tr
                     key={project.id}
                     onClick={() => onSelectProject(project)}
-                    className={`group cursor-pointer transition-colors ${
-                      selectedProjectId === project.id 
-                        ? 'bg-primary/5' 
+                    className={cn(
+                      "group cursor-pointer transition-colors",
+                      selectedProjectId === project.id
+                        ? 'bg-primary/5'
                         : 'hover:bg-white/5'
-                    }`}
+                    )}
                   >
                     <td className="px-5 py-3.5">
                       <div className="font-medium text-slate-200 group-hover:text-primary transition-colors">
@@ -236,12 +299,13 @@ export function ReportsSurface({ report, onSelectProject, selectedProjectId }: R
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3 w-32">
                         <div className="flex-1 h-1.5 bg-neutral-border rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full ${
-                              project.status === 'at-risk' ? 'bg-amber-500' : 
-                              project.status === 'off-track' ? 'bg-rose-500' : 
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              project.status === 'at-risk' ? 'bg-amber-500' :
+                              project.status === 'off-track' ? 'bg-rose-500' :
                               'bg-emerald-500'
-                            }`}
+                            )}
                             style={{ width: `${project.progress}%` }}
                           />
                         </div>
@@ -249,18 +313,19 @@ export function ReportsSurface({ report, onSelectProject, selectedProjectId }: R
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
-                      <div className={`inline-flex items-center justify-center px-2 py-1 rounded text-xs font-bold ${
+                      <div className={cn(
+                        "inline-flex items-center justify-center px-2 py-1 rounded text-xs font-bold",
                         project.healthScore >= 80 ? 'bg-emerald-500/10 text-emerald-400' :
                         project.healthScore >= 60 ? 'bg-amber-500/10 text-amber-400' :
                         'bg-rose-500/10 text-rose-400'
-                      }`}>
+                      )}>
                         {project.healthScore}
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
                         {project.owner.avatar ? (
-                          <img src={project.owner.avatar} alt={project.owner.name} className="w-6 h-6 rounded-full" />
+                          <Image src={project.owner.avatar} alt={project.owner.name} width={24} height={24} className="w-6 h-6 rounded-full" />
                         ) : (
                           <div className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
                             {project.owner.initials}

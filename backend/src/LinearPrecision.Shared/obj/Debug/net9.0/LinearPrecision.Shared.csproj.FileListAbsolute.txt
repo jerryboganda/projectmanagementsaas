@@ -10,3 +10,4 @@ C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\Linear
 C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Debug\net9.0\refint\LinearPrecision.Shared.dll
 C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Debug\net9.0\LinearPrecision.Shared.pdb
 C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Debug\net9.0\ref\LinearPrecision.Shared.dll
+C:\Users\Dr Faisal Maqsood PC\Desktop\Project Management SaaS\backend\src\LinearPrecision.Shared\obj\Debug\net9.0\LinearPrecision.Shared.sourcelink.json

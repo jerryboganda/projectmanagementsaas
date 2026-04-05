@@ -1,8 +1,32 @@
 "use client";
 
 import { motion } from "motion/react";
+import { cn } from "@/lib/utils";
 
-export function FooterStats() {
+interface FooterStatsProps {
+  projectCount?: number;
+  completedTasks?: number;
+  activeMembers?: number;
+  totalMembers?: number;
+  teamCapacity?: number;
+}
+
+export function FooterStats({
+  projectCount,
+  completedTasks,
+  activeMembers,
+  totalMembers,
+  teamCapacity,
+}: FooterStatsProps) {
+  const hasData = projectCount !== undefined;
+  const capacityPct = teamCapacity ?? 0;
+  const capacityColor =
+    capacityPct >= 90
+      ? "bg-rose-500"
+      : capacityPct >= 70
+      ? "bg-amber-500"
+      : "bg-primary";
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -19,25 +43,32 @@ export function FooterStats() {
           </span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">API Latency</span>
-          <span className="text-xs font-semibold text-slate-200">124ms</span>
+          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Active Projects</span>
+          <span className="text-xs font-semibold text-slate-200">{hasData ? projectCount : "--"}</span>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Active Cycles</span>
-          <span className="text-xs font-semibold text-slate-200">12</span>
+          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Tasks Completed</span>
+          <span className="text-xs font-semibold text-slate-200">{hasData ? completedTasks : "--"}</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Active Members</span>
+          <span className="text-xs font-semibold text-slate-200">
+            {hasData ? `${activeMembers ?? 0} / ${totalMembers ?? 0}` : "--"}
+          </span>
         </div>
       </div>
 
       <div className="flex items-center gap-3 w-full sm:w-auto">
-        <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Current Load</span>
+        <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider whitespace-nowrap">Team Load</span>
         <div className="w-32 h-1.5 bg-neutral-border rounded-full overflow-hidden">
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: "68%" }}
+            animate={{ width: `${capacityPct}%` }}
             transition={{ duration: 1, delay: 0.8, ease: "easeOut" }}
-            className="h-full bg-primary"
+            className={cn("h-full", capacityColor)}
           />
         </div>
+        <span className="text-[10px] font-mono text-slate-400">{hasData ? `${capacityPct}%` : "--"}</span>
       </div>
     </motion.div>
   );

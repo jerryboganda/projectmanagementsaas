@@ -5,7 +5,7 @@ import type { CalendarItem, CalendarItemType, CalendarProject } from "./data";
 import { ViewMode } from "./calendar-layout";
 import { motion } from "motion/react";
 import { Bell, ChevronRight, Clock, AlertCircle, Users } from "lucide-react";
-import clsx from "clsx";
+import { cn } from "@/lib/utils";
 
 interface Props {
   items: CalendarItem[];
@@ -13,6 +13,7 @@ interface Props {
   viewMode: ViewMode;
   selectedItemId: string | null;
   onItemSelect: (id: string | null) => void;
+  onSlotClick?: (date: Date, hour: number) => void;
   projects: CalendarProject[];
 }
 
@@ -67,12 +68,122 @@ function getTypeIcon(type: CalendarItemType) {
   }
 }
 
+// ─── Overlap stacking helpers ──────────────────────────────────────────────
+
+interface OverlapInfo {
+  column: number;
+  totalColumns: number;
+}
+
+/**
+ * Computes side-by-side column assignments for overlapping calendar events.
+ * Uses greedy column assignment followed by union-find to discover connected
+ * overlap groups, then resolves the total column count for each group.
+ */
+function computeOverlapLayout(
+  items: { id: string; startHour: number; endHour: number }[],
+): Map<string, OverlapInfo> {
+  if (items.length === 0) return new Map();
+
+  const sorted = [...items].sort(
+    (a, b) =>
+      a.startHour - b.startHour ||
+      (b.endHour - b.startHour) - (a.endHour - a.startHour),
+  );
+
+  // Greedy column assignment: place each event in the first column whose
+  // previous occupant has already ended.
+  const columnEnds: number[] = [];
+  const columnAssignment = new Map<string, number>();
+
+  for (const ev of sorted) {
+    let col = columnEnds.findIndex((end) => end <= ev.startHour);
+    if (col === -1) {
+      col = columnEnds.length;
+      columnEnds.push(ev.endHour);
+    } else {
+      columnEnds[col] = ev.endHour;
+    }
+    columnAssignment.set(ev.id, col);
+  }
+
+  // Union-find to discover connected overlap groups
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    if (!parent.has(id)) parent.set(id, id);
+    if (parent.get(id) !== id) parent.set(id, find(parent.get(id)!));
+    return parent.get(id)!;
+  };
+  const union = (a: string, b: string) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (sorted[j].startHour >= sorted[i].endHour) break;
+      union(sorted[i].id, sorted[j].id);
+    }
+  }
+
+  // Group by connected component and resolve total columns per group
+  const groups = new Map<string, string[]>();
+  for (const ev of sorted) {
+    const root = find(ev.id);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root)!.push(ev.id);
+  }
+
+  const result = new Map<string, OverlapInfo>();
+  for (const members of groups.values()) {
+    const maxCol = Math.max(
+      ...members.map((id) => columnAssignment.get(id) ?? 0),
+    );
+    const totalColumns = maxCol + 1;
+    for (const id of members) {
+      result.set(id, {
+        column: columnAssignment.get(id) ?? 0,
+        totalColumns,
+      });
+    }
+  }
+
+  return result;
+}
+
+/** Compute the fractional start/end hours for an item relative to a given day. */
+function getItemHourRange(
+  item: CalendarItem,
+  dayTimestamp: number,
+): { startHour: number; endHour: number } {
+  const start = new Date(item.startTime);
+  const end = new Date(item.endTime);
+  let startHour = start.getHours() + start.getMinutes() / 60;
+  let endHour = end.getHours() + end.getMinutes() / 60;
+
+  if (end.getDate() !== start.getDate() || end.getMonth() !== start.getMonth()) {
+    endHour = 24;
+  }
+  if (start.getTime() < dayTimestamp) {
+    startHour = 0;
+  }
+  if (endHour <= startHour) {
+    endHour = startHour + 0.5;
+  }
+
+  return { startHour, endHour };
+}
+
+// ─── Component ─────────────────────────────────────────────────────────────
+
 export function CalendarSurface({
   items,
   currentDate,
   viewMode,
   selectedItemId,
   onItemSelect,
+  onSlotClick,
   projects,
 }: Props) {
   const resolveProjectName = (item: CalendarItem) =>
@@ -138,6 +249,8 @@ export function CalendarSurface({
     );
   };
 
+  // ─── Month view ────────────────────────────────────────────────────────
+
   const renderMonthView = () => (
     <div className="flex-1 flex flex-col h-full bg-background-dark">
       <div className="grid grid-cols-7 border-b border-neutral-border bg-neutral-surface/30">
@@ -159,7 +272,7 @@ export function CalendarSurface({
           return (
             <div
               key={index}
-              className={clsx(
+              className={cn(
                 "border-r border-b border-neutral-border/50 p-1 flex flex-col gap-1 overflow-hidden transition-colors hover:bg-white/[0.01]",
                 !dayObj.isCurrentMonth && "bg-neutral-surface/20 opacity-50",
                 today && "bg-primary/5",
@@ -167,7 +280,7 @@ export function CalendarSurface({
             >
               <div className="flex items-center justify-between px-1 mb-1">
                 <span
-                  className={clsx(
+                  className={cn(
                     "text-[12px] font-medium flex items-center justify-center size-6 rounded-full",
                     today ? "bg-primary text-white" : "text-slate-400",
                   )}
@@ -196,6 +309,8 @@ export function CalendarSurface({
       </div>
     </div>
   );
+
+  // ─── Agenda view ───────────────────────────────────────────────────────
 
   const renderAgendaView = () => {
     const groupedItems = items.reduce<Record<string, { label: string; items: CalendarItem[] }>>((acc, item) => {
@@ -243,6 +358,8 @@ export function CalendarSurface({
     );
   };
 
+  // ─── Week view ─────────────────────────────────────────────────────────
+
   const renderWeekView = () => {
     const startOfWeek = new Date(currentDate);
     const day = startOfWeek.getDay();
@@ -271,7 +388,7 @@ export function CalendarSurface({
                   {DAYS_OF_WEEK[date.getDay()]}
                 </span>
                 <span
-                  className={clsx(
+                  className={cn(
                     "text-[15px] font-medium size-8 flex items-center justify-center rounded-full",
                     today ? "bg-primary text-white" : "text-slate-200",
                   )}
@@ -305,38 +422,55 @@ export function CalendarSurface({
               {weekDays.map((date, dayIdx) => {
                 const dayItems = getItemsForDate(date);
                 const today = isToday(date);
+                const dayTimestamp = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
+                // Compute overlap layout for side-by-side stacking
+                const itemPositions = dayItems.map((item) => ({
+                  id: item.id,
+                  ...getItemHourRange(item, dayTimestamp),
+                }));
+                const overlapLayout = computeOverlapLayout(itemPositions);
 
                 return (
                   <div
                     key={dayIdx}
-                    className={clsx(
+                    className={cn(
                       "flex-1 border-r border-neutral-border/50 relative min-h-[1536px]",
                       today && "bg-primary/[0.02]",
                     )}
                   >
+                    {/* Clickable hour slots for creating events */}
+                    {hours.map((hour) => (
+                      <div
+                        key={`slot-${hour}`}
+                        className="absolute left-0 right-0 h-16 cursor-pointer hover:bg-primary/[0.04] transition-colors z-[1]"
+                        style={{ top: `${hour * 64}px` }}
+                        onClick={() => onSlotClick?.(date, hour)}
+                      />
+                    ))}
+
                     {dayItems.map((item) => {
-                      const start = new Date(item.startTime);
-                      const end = new Date(item.endTime);
-                      const startHour = start.getHours() + start.getMinutes() / 60;
-                      let endHour = end.getHours() + end.getMinutes() / 60;
+                      const pos = itemPositions.find((p) => p.id === item.id);
+                      const overlap = overlapLayout.get(item.id) ?? { column: 0, totalColumns: 1 };
 
-                      if (end.getDate() !== start.getDate() || end.getMonth() !== start.getMonth()) {
-                        endHour = 24;
-                      }
+                      const startH = pos?.startHour ?? 0;
+                      const endH = pos?.endHour ?? 1;
+                      const top = startH * 64;
+                      const height = Math.max((endH - startH) * 64, 24);
 
-                      let top = startHour * 64;
-                      let height = Math.max((endHour - startHour) * 64, 24);
-
-                      if (start.getTime() < new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) {
-                        top = 0;
-                        height = Math.max(endHour * 64, 24);
-                      }
+                      const widthPercent = 100 / overlap.totalColumns;
+                      const leftPercent = overlap.column * widthPercent;
 
                       return (
                         <div
                           key={item.id}
-                          className="absolute left-1 right-1 z-10"
-                          style={{ top: `${top}px`, height: `${height}px` }}
+                          className="absolute z-10"
+                          style={{
+                            top: `${top}px`,
+                            height: `${height}px`,
+                            left: `calc(${leftPercent}% + 2px)`,
+                            width: `calc(${widthPercent}% - 4px)`,
+                          }}
                         >
                           <CalendarItemCard
                             item={item}
@@ -358,9 +492,19 @@ export function CalendarSurface({
     );
   };
 
+  // ─── Day view ──────────────────────────────────────────────────────────
+
   const renderDayView = () => {
     const hours = Array.from({ length: 24 }).map((_, i) => i);
     const dayItems = getItemsForDate(currentDate);
+    const dayTimestamp = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()).getTime();
+
+    // Compute overlap layout for side-by-side stacking
+    const itemPositions = dayItems.map((item) => ({
+      id: item.id,
+      ...getItemHourRange(item, dayTimestamp),
+    }));
+    const overlapLayout = computeOverlapLayout(itemPositions);
 
     return (
       <div className="flex-1 flex flex-col h-full bg-background-dark overflow-hidden">
@@ -370,7 +514,7 @@ export function CalendarSurface({
               {DAYS_OF_WEEK[currentDate.getDay()]}
             </span>
             <span
-              className={clsx(
+              className={cn(
                 "text-[15px] font-medium size-8 flex items-center justify-center rounded-full",
                 isToday(currentDate) ? "bg-primary text-white" : "text-slate-200",
               )}
@@ -399,29 +543,38 @@ export function CalendarSurface({
                 ))}
               </div>
 
+              {/* Clickable hour slots for creating events */}
+              {hours.map((hour) => (
+                <div
+                  key={`slot-${hour}`}
+                  className="absolute left-0 right-0 h-20 cursor-pointer hover:bg-primary/[0.04] transition-colors z-[1]"
+                  style={{ top: `${hour * 80}px` }}
+                  onClick={() => onSlotClick?.(currentDate, hour)}
+                />
+              ))}
+
               {dayItems.map((item) => {
-                const start = new Date(item.startTime);
-                const end = new Date(item.endTime);
-                const startHour = start.getHours() + start.getMinutes() / 60;
-                let endHour = end.getHours() + end.getMinutes() / 60;
+                const pos = itemPositions.find((p) => p.id === item.id);
+                const overlap = overlapLayout.get(item.id) ?? { column: 0, totalColumns: 1 };
 
-                if (end.getDate() !== start.getDate() || end.getMonth() !== start.getMonth()) {
-                  endHour = 24;
-                }
+                const startH = pos?.startHour ?? 0;
+                const endH = pos?.endHour ?? 1;
+                const top = startH * 80;
+                const height = Math.max((endH - startH) * 80, 32);
 
-                let top = startHour * 80;
-                let height = Math.max((endHour - startHour) * 80, 32);
-
-                if (start.getTime() < new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()).getTime()) {
-                  top = 0;
-                  height = Math.max(endHour * 80, 32);
-                }
+                const widthPercent = 100 / overlap.totalColumns;
+                const leftPercent = overlap.column * widthPercent;
 
                 return (
                   <div
                     key={item.id}
-                    className="absolute left-2 right-4 z-10"
-                    style={{ top: `${top}px`, height: `${height}px` }}
+                    className="absolute z-10"
+                    style={{
+                      top: `${top}px`,
+                      height: `${height}px`,
+                      left: `calc(${leftPercent}% + 8px)`,
+                      width: `calc(${widthPercent}% - 24px)`,
+                    }}
                   >
                     <CalendarItemCard
                       item={item}
@@ -451,6 +604,8 @@ export function CalendarSurface({
   );
 }
 
+// ─── Sub-components ────────────────────────────────────────────────────────
+
 function CalendarItemCard({
   item,
   isSelected,
@@ -475,7 +630,7 @@ function CalendarItemCard({
         e.stopPropagation();
         onClick();
       }}
-      className={clsx(
+      className={cn(
         "px-1.5 py-1 rounded-[3px] text-[10px] font-medium cursor-pointer border transition-colors flex flex-col gap-1 overflow-hidden border-neutral-border/60 border-l-2",
         isAbsolute ? "h-full w-full" : "truncate items-center flex-row",
         isSelected ? "ring-1 ring-primary ring-offset-1 ring-offset-background-dark" : "hover:brightness-110",
@@ -528,7 +683,7 @@ function AgendaItemCard({
     <motion.div
       layoutId={`cal-agenda-${item.id}`}
       onClick={onClick}
-      className={clsx(
+      className={cn(
         "flex items-center gap-4 p-3 rounded-md border transition-colors cursor-pointer group",
         isSelected
           ? "bg-primary/10 border-primary/30"
@@ -555,7 +710,7 @@ function AgendaItemCard({
             {item.title}
           </span>
           <span
-            className={clsx(
+            className={cn(
               "px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-wider border",
               TYPE_BADGES[item.type],
             )}
@@ -572,7 +727,7 @@ function AgendaItemCard({
       </div>
 
       <ChevronRight
-        className={clsx(
+        className={cn(
           "size-4 transition-transform",
           isSelected ? "text-primary translate-x-1" : "text-slate-600 group-hover:text-slate-400 group-hover:translate-x-0.5",
         )}

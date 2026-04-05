@@ -1,0 +1,133 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:5000}
+        NEXT_PUBLIC_SIGNALR_BASE_URL: ${NEXT_PUBLIC_SIGNALR_BASE_URL:-http://localhost:5000}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:5000}
+      - NEXT_PUBLIC_SIGNALR_BASE_URL=${NEXT_PUBLIC_SIGNALR_BASE_URL:-http://localhost:5000}
+      # Set an internal API URL for SSR to communicate directly inside the docker network
+      - INTERNAL_API_URL=http://api:8080
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - linear_network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: src/LinearPrecision.Api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-linearprecision};Username=${POSTGRES_USER:-lp};Password=${POSTGRES_PASSWORD:-production_secret_password}
+      - ConnectionStrings__Redis=redis:6379
+      - Jwt__Key=${JWT_KEY:-super-secret-production-key-that-is-at-least-32-bytes!}
+      - Jwt__Issuer=${JWT_ISSUER:-https://api.linearprecision.com}
+      - Jwt__Audience=${JWT_AUDIENCE:-linear-precision-api}
+      - Storage__ServiceUrl=http://minio:9000
+      - Storage__BucketName=${MINIO_BUCKET:-linear-precision}
+      - Storage__AccessKey=${MINIO_ROOT_USER:-minioadmin}
+      - Storage__SecretKey=${MINIO_ROOT_PASSWORD:-minioadmin}
+      # Allow the API app to migrate database on startup if you implement that, 
+      # or provide an init container. We assume automatic migration or manual step.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - linear_network
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: src/LinearPrecision.Worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-linearprecision};Username=${POSTGRES_USER:-lp};Password=${POSTGRES_PASSWORD:-production_secret_password}
+      - ConnectionStrings__Redis=redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - linear_network
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-linearprecision}
+      POSTGRES_USER: ${POSTGRES_USER:-lp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-production_secret_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lp} -d ${POSTGRES_DB:-linearprecision}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - linear_network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - linear_network
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - linear_network
+
+volumes:
+  pgdata:
+  miniodata:
+
+networks:
+  linear_network:
+    driver: bridge

@@ -7,11 +7,14 @@ import {
   CheckCircle2,
   CreditCard,
   Download,
+  Info,
   Loader2,
   Star,
+  X,
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Modal } from '@/components/ui/modal';
 
 interface Plan {
   id: string;
@@ -89,7 +92,36 @@ interface Invoice {
   description: string;
 }
 
-const MOCK_INVOICES: Invoice[] = [];
+const MOCK_INVOICES: Invoice[] = [
+  {
+    id: 'inv-001',
+    date: 'Mar 01, 2026',
+    amount: '$0.00',
+    status: 'paid',
+    description: 'Free Plan - March 2026',
+  },
+  {
+    id: 'inv-002',
+    date: 'Feb 01, 2026',
+    amount: '$0.00',
+    status: 'paid',
+    description: 'Free Plan - February 2026',
+  },
+  {
+    id: 'inv-003',
+    date: 'Jan 01, 2026',
+    amount: '$0.00',
+    status: 'paid',
+    description: 'Free Plan - January 2026',
+  },
+  {
+    id: 'inv-004',
+    date: 'Dec 01, 2025',
+    amount: '$36.00',
+    status: 'paid',
+    description: 'Pro Plan - December 2025 (3 seats)',
+  },
+];
 
 function UsageMeter({
   label,
@@ -131,6 +163,11 @@ function UsageMeter({
 export function BillingPanel() {
   const [upgrading, setUpgrading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvc, setCvc] = useState('');
+  const [savingCard, setSavingCard] = useState(false);
 
   const handleUpgrade = async (planId: string) => {
     setMessage(null);
@@ -138,6 +175,18 @@ export function BillingPanel() {
     await new Promise((resolve) => setTimeout(resolve, 1200));
     setUpgrading(false);
     setMessage(`Upgrade to ${planId.charAt(0).toUpperCase() + planId.slice(1)} initiated — you will be redirected to the billing portal once the Stripe integration is live.`);
+  };
+
+  const handleSavePaymentMethod = async () => {
+    setSavingCard(true);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    setSavingCard(false);
+    setPaymentModalOpen(false);
+    setCardNumber('');
+    setExpiry('');
+    setCvc('');
+    setMessage('Payment method saved (simulated). Stripe integration is pending.');
+    setTimeout(() => setMessage(null), 5000);
   };
 
   return (
@@ -284,7 +333,10 @@ export function BillingPanel() {
             <CreditCard className="size-5" />
             <span className="text-sm">No payment method on file — required when upgrading to a paid plan.</span>
           </div>
-          <button className="rounded-md border border-neutral-border bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10">
+          <button
+            onClick={() => setPaymentModalOpen(true)}
+            className="rounded-md border border-neutral-border bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10"
+          >
             Add Payment Method
           </button>
         </div>
@@ -340,6 +392,88 @@ export function BillingPanel() {
           </div>
         )}
       </section>
+
+      {/* Payment Method Modal */}
+      <Modal
+        isOpen={paymentModalOpen}
+        onClose={() => {
+          setPaymentModalOpen(false);
+          setCardNumber('');
+          setExpiry('');
+          setCvc('');
+        }}
+        title="Add Payment Method"
+        footer={
+          <>
+            <button
+              onClick={() => {
+                setPaymentModalOpen(false);
+                setCardNumber('');
+                setExpiry('');
+                setCvc('');
+              }}
+              className="rounded-md border border-neutral-border bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-slate-100"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleSavePaymentMethod()}
+              disabled={savingCard}
+              className={cn(
+                'flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90',
+                savingCard && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              {savingCard ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
+              {savingCard ? 'Saving...' : 'Save Card'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+            <Info className="mt-0.5 size-4 shrink-0 text-amber-400" />
+            <p className="text-xs text-amber-200">
+              Stripe integration pending. This form is a placeholder and will not process real payments.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-medium text-slate-300">Card Number</label>
+            <input
+              type="text"
+              value={cardNumber}
+              onChange={(e) => setCardNumber(e.target.value)}
+              placeholder="4242 4242 4242 4242"
+              maxLength={19}
+              className="h-8 w-full rounded-sm border border-neutral-border bg-transparent px-3 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-primary focus:outline-none transition-colors"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-medium text-slate-300">Expiry Date</label>
+              <input
+                type="text"
+                value={expiry}
+                onChange={(e) => setExpiry(e.target.value)}
+                placeholder="MM / YY"
+                maxLength={7}
+                className="h-8 w-full rounded-sm border border-neutral-border bg-transparent px-3 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-primary focus:outline-none transition-colors"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-medium text-slate-300">CVC</label>
+              <input
+                type="text"
+                value={cvc}
+                onChange={(e) => setCvc(e.target.value)}
+                placeholder="123"
+                maxLength={4}
+                className="h-8 w-full rounded-sm border border-neutral-border bg-transparent px-3 text-[13px] text-slate-200 placeholder:text-slate-600 focus:border-primary focus:outline-none transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+      </Modal>
     </motion.div>
   );
 }

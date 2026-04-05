@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { motion } from "motion/react";
 import {
   Activity,
@@ -69,7 +70,7 @@ export function WorkloadDetail({ member, tasks, onClose }: Props) {
           <div className="flex items-start gap-3">
             <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.04] text-sm font-semibold text-slate-100">
               {member.avatarUrl ? (
-                <img src={member.avatarUrl} alt={member.fullName} className="size-full object-cover" />
+                <Image src={member.avatarUrl} alt={member.fullName} width={48} height={48} className="size-full object-cover" />
               ) : (
                 member.fullName
                   .split(" ")

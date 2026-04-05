@@ -45,6 +45,10 @@ const DATE_RANGE_LABELS: Record<DateRange, string> = {
   custom: "Custom",
 };
 
+function fmtLabel(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 // ============================================================
 // HELPERS
 // ============================================================
@@ -110,7 +114,53 @@ export function TimeTrackingLayout() {
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
 
+  // Custom date range state
+  const [showCustomPicker, setShowCustomPicker] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
+  const [appliedCustomStart, setAppliedCustomStart] = useState<Date | null>(null);
+  const [appliedCustomEnd, setAppliedCustomEnd] = useState<Date | null>(null);
+  const customPickerRef = useRef<HTMLDivElement>(null);
+
   const now = useMemo(() => new Date(), []);
+
+  // Initialize custom date inputs with current week when "Custom" is first selected
+  const initCustomDates = useCallback(() => {
+    const days = getWeekDays(now, 0);
+    setCustomStartDate(fmt(days[0]));
+    setCustomEndDate(fmt(days[6]));
+  }, [now]);
+
+  const handleApplyCustomRange = useCallback(() => {
+    if (customStartDate && customEndDate) {
+      const start = new Date(customStartDate + "T00:00:00");
+      const end = new Date(customEndDate + "T00:00:00");
+      if (start <= end) {
+        setAppliedCustomStart(start);
+        setAppliedCustomEnd(end);
+        setShowCustomPicker(false);
+      }
+    }
+  }, [customStartDate, customEndDate]);
+
+  // Close custom picker on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (customPickerRef.current && !customPickerRef.current.contains(e.target as Node)) {
+        setShowCustomPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Compute the custom date label for the dropdown button
+  const customDateLabel = useMemo(() => {
+    if (dateRange === "custom" && appliedCustomStart && appliedCustomEnd) {
+      return `${fmtLabel(appliedCustomStart)} - ${fmtLabel(appliedCustomEnd)}`;
+    }
+    return DATE_RANGE_LABELS[dateRange];
+  }, [dateRange, appliedCustomStart, appliedCustomEnd]);
 
   // Compute date window
   const dateWindow = useMemo<[Date, Date]>(() => {
@@ -125,17 +175,24 @@ export function TimeTrackingLayout() {
     if (dateRange === "this-month") {
       return getMonthRange(now);
     }
-    // custom defaults to this week
+    // custom: use applied dates or fall back to this week
+    if (appliedCustomStart && appliedCustomEnd) {
+      return [appliedCustomStart, appliedCustomEnd];
+    }
     const days = getWeekDays(now, 0);
     return [days[0], days[6]];
-  }, [dateRange, now]);
+  }, [dateRange, now, appliedCustomStart, appliedCustomEnd]);
 
   const weekDays = useMemo(() => {
     if (dateRange === "this-week") return getWeekDays(now, 0);
     if (dateRange === "last-week") return getWeekDays(now, -1);
+    if (dateRange === "custom" && appliedCustomStart) {
+      // Show the week containing the custom start date
+      return getWeekDays(appliedCustomStart, 0);
+    }
     // For month view, still show current week grid
     return getWeekDays(now, 0);
-  }, [dateRange, now]);
+  }, [dateRange, now, appliedCustomStart]);
 
   const timeTrackingData = useTimeTrackingData(dateWindow[0], dateWindow[1]);
   const allTasks = useMemo(() => timeTrackingData.tasks, [timeTrackingData.tasks]);
@@ -282,17 +339,18 @@ export function TimeTrackingLayout() {
       <div className="flex items-center justify-between gap-3 px-6 py-3 border-b border-neutral-border bg-neutral-surface/30">
         <div className="flex items-center gap-2 flex-wrap">
           {/* Date range */}
-          <div className="relative">
+          <div className="relative" ref={customPickerRef}>
             <button
               onClick={() => {
                 setDateDropdownOpen(!dateDropdownOpen);
                 setMemberDropdownOpen(false);
                 setProjectDropdownOpen(false);
+                setShowCustomPicker(false);
               }}
               className="h-8 px-3 flex items-center gap-2 text-[13px] text-slate-300 bg-white/[0.04] border border-neutral-border rounded-sm hover:bg-white/[0.07] transition-colors"
             >
               <Calendar className="size-3.5 text-slate-500" />
-              {DATE_RANGE_LABELS[dateRange]}
+              {customDateLabel}
               <ChevronDown className="size-3 text-slate-500" />
             </button>
             {dateDropdownOpen && (
@@ -303,12 +361,78 @@ export function TimeTrackingLayout() {
                 }))}
                 selected={dateRange}
                 onSelect={(v) => {
-                  setDateRange(v as DateRange);
+                  const val = v as DateRange;
+                  setDateRange(val);
                   setDateDropdownOpen(false);
+                  if (val === "custom") {
+                    if (!appliedCustomStart) {
+                      initCustomDates();
+                    } else {
+                      setCustomStartDate(fmt(appliedCustomStart));
+                      setCustomEndDate(fmt(appliedCustomEnd!));
+                    }
+                    setShowCustomPicker(true);
+                  } else {
+                    setShowCustomPicker(false);
+                  }
                 }}
                 onClose={() => setDateDropdownOpen(false)}
               />
             )}
+            {/* Custom date range picker */}
+            <AnimatePresence>
+              {showCustomPicker && dateRange === "custom" && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full left-0 mt-1 w-72 bg-neutral-surface border border-neutral-border rounded-sm shadow-xl z-50 p-4"
+                >
+                  <div className="text-[12px] font-semibold text-slate-300 mb-3">Custom Date Range</div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-500 mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                        className="w-full h-8 bg-white/[0.03] border border-neutral-border rounded-sm px-3 text-[13px] text-slate-200 outline-none focus:border-primary/50 transition-colors [color-scheme:dark]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-500 mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                        min={customStartDate}
+                        className="w-full h-8 bg-white/[0.03] border border-neutral-border rounded-sm px-3 text-[13px] text-slate-200 outline-none focus:border-primary/50 transition-colors [color-scheme:dark]"
+                      />
+                    </div>
+                    {customStartDate && customEndDate && new Date(customStartDate) > new Date(customEndDate) && (
+                      <p className="text-[11px] text-rose-400">Start date must be before end date</p>
+                    )}
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        onClick={() => setShowCustomPicker(false)}
+                        className="h-7 px-2.5 text-[12px] text-slate-400 hover:text-slate-200 hover:bg-white/5 rounded-sm transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleApplyCustomRange}
+                        disabled={!customStartDate || !customEndDate || new Date(customStartDate) > new Date(customEndDate)}
+                        className="h-7 px-3 text-[12px] font-medium bg-primary hover:bg-primary/90 text-white rounded-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      >
+                        <Check className="size-3" />
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Member filter */}
@@ -564,26 +688,16 @@ export function TimeTrackingLayout() {
                                   const key = fmt(d);
                                   const hrs = row.byDay[key] ?? 0;
                                   return (
-                                    <td key={key} className="text-center px-2 py-2.5">
-                                      {hrs > 0 ? (
-                                        <span
-                                          className={cn(
-                                            "inline-flex items-center justify-center min-w-[36px] h-7 rounded-sm text-[13px] font-mono font-medium",
-                                            hrs >= 10
-                                              ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                                              : hrs >= 8
-                                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                              : "bg-white/[0.04] text-slate-300 border border-neutral-border/50",
-                                          )}
-                                        >
-                                          {hrs}
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center justify-center min-w-[36px] h-7 text-[13px] text-slate-700 hover:text-slate-500 cursor-pointer transition-colors">
-                                          —
-                                        </span>
-                                      )}
-                                    </td>
+                                    <TimesheetCell
+                                      key={key}
+                                      taskId={row.taskId}
+                                      date={key}
+                                      hours={hrs}
+                                      isToday={key === todayStr}
+                                      entries={filteredEntries}
+                                      onCreateEntry={timeTrackingData.createTimeEntry}
+                                      onUpdateEntry={timeTrackingData.updateTimeEntry}
+                                    />
                                   );
                                 })}
                                 <td className="text-center px-3 py-2.5">
@@ -1371,6 +1485,167 @@ function InlineEntryRow({
         </button>
       )}
     </div>
+  );
+}
+
+// ============================================================
+// TIMESHEET CELL (editable)
+// ============================================================
+
+interface TimesheetCellProps {
+  taskId: string;
+  date: string;
+  hours: number;
+  isToday: boolean;
+  entries: TimeTrackingEntry[];
+  onCreateEntry: (input: { taskId: string; date: string; hours: number; description?: string; isBillable?: boolean }) => Promise<unknown>;
+  onUpdateEntry: (id: string, entry: TimeTrackingEntry, patch: { hours?: number }) => Promise<unknown>;
+}
+
+function TimesheetCell({
+  taskId,
+  date,
+  hours,
+  entries,
+  onCreateEntry,
+  onUpdateEntry,
+}: TimesheetCellProps) {
+  const [editing, setEditing] = useState(false);
+  const [inputVal, setInputVal] = useState(hours > 0 ? hours.toString() : "");
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  // Reset input value when hours change from outside
+  useEffect(() => {
+    if (!editing) {
+      setInputVal(hours > 0 ? hours.toString() : "");
+    }
+  }, [hours, editing]);
+
+  const handleClick = () => {
+    setInputVal(hours > 0 ? hours.toString() : "");
+    setEditing(true);
+  };
+
+  const commitValue = async () => {
+    const parsed = parseFloat(inputVal);
+    setEditing(false);
+
+    if (inputVal.trim() === "" || isNaN(parsed) || parsed < 0) {
+      // No change or invalid
+      return;
+    }
+
+    if (parsed === hours) {
+      // No change
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      if (hours > 0) {
+        // Update existing entry
+        const matchingEntry = entries.find(
+          (e) => e.taskId === taskId && e.date === date,
+        );
+        if (matchingEntry) {
+          await onUpdateEntry(matchingEntry.id, matchingEntry, { hours: parsed });
+        }
+      } else if (parsed > 0) {
+        // Create new entry
+        await onCreateEntry({
+          taskId,
+          date,
+          hours: parsed,
+          isBillable: false,
+        });
+      }
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 1500);
+    } catch {
+      // silent fail
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      void commitValue();
+    }
+    if (e.key === "Escape") {
+      setInputVal(hours > 0 ? hours.toString() : "");
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <td className="text-center px-2 py-2.5">
+        <input
+          ref={inputRef}
+          type="number"
+          min="0"
+          max="24"
+          step="0.25"
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          onBlur={() => void commitValue()}
+          onKeyDown={handleKeyDown}
+          className="w-14 h-7 bg-neutral-surface border border-primary/50 rounded-sm px-1 text-center text-[13px] text-slate-100 font-mono outline-none"
+        />
+      </td>
+    );
+  }
+
+  return (
+    <td className="text-center px-2 py-2.5">
+      {isSaving ? (
+        <span className="inline-flex items-center justify-center min-w-[36px] h-7">
+          <Loader2 className="size-3.5 animate-spin text-primary" />
+        </span>
+      ) : savedFlash ? (
+        <motion.span
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          className="inline-flex items-center justify-center min-w-[36px] h-7 text-[11px] text-emerald-400 gap-0.5"
+        >
+          <Check className="size-3" /> Saved
+        </motion.span>
+      ) : hours > 0 ? (
+        <button
+          onClick={handleClick}
+          title="Click to edit hours"
+          className={cn(
+            "inline-flex items-center justify-center min-w-[36px] h-7 rounded-sm text-[13px] font-mono font-medium cursor-pointer transition-colors hover:ring-1 hover:ring-primary/40",
+            hours >= 10
+              ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+              : hours >= 8
+              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+              : "bg-white/[0.04] text-slate-300 border border-neutral-border/50",
+          )}
+        >
+          {hours}
+        </button>
+      ) : (
+        <button
+          onClick={handleClick}
+          title="Click to log hours"
+          className="inline-flex items-center justify-center min-w-[36px] h-7 text-[13px] text-slate-700 hover:text-slate-400 hover:bg-white/[0.03] rounded-sm cursor-pointer transition-colors"
+        >
+          --
+        </button>
+      )}
+    </td>
   );
 }
 

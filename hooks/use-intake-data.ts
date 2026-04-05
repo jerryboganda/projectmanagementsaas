@@ -1,246 +1,142 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { useAuth } from "@/contexts/auth-context";
-import { useWorkspace } from "@/contexts/workspace-context";
-import type {
-  IntakeReviewSubmissionRequest,
-  IntakeSubmissionStatus,
-  ProjectResponse,
-  WorkspaceMemberResponse,
-} from "@/lib/api/contracts";
+import { useCallback, useMemo, useState } from "react";
 import {
   buildConvertToTaskRequest,
   getSubmissionCountForForm,
-  mapIntakeForm,
-  mapIntakeSubmission,
+  MOCK_FORMS,
+  MOCK_MEMBERS,
+  MOCK_PROJECTS,
+  MOCK_SUBMISSIONS,
   type IntakeFormSurface,
   type IntakeSubmissionSurface,
   type IntakeSurfaceStatus,
 } from "@/components/intake/data";
 
-function intakeFormsQueryKey(workspaceId: string | null) {
-  return ["intake", workspaceId, "forms"] as const;
-}
-
-function intakeSubmissionsQueryKey(workspaceId: string | null) {
-  return ["intake", workspaceId, "submissions"] as const;
-}
-
-function intakeProjectsQueryKey(workspaceId: string | null) {
-  return ["intake", workspaceId, "projects"] as const;
-}
-
-function intakeMembersQueryKey(workspaceId: string | null) {
-  return ["intake", workspaceId, "members"] as const;
-}
-
-function toReviewStatus(status: IntakeSurfaceStatus): IntakeSubmissionStatus {
-  switch (status) {
-    case "inReview":
-      return "InReview";
-    case "accepted":
-      return "Accepted";
-    case "rejected":
-      return "Rejected";
-    case "converted":
-      return "ConvertedToTask";
-    case "new":
-    default:
-      return "New";
-  }
-}
-
 export function useIntakeData() {
-  const { apiClient, session } = useAuth();
-  const { activeWorkspaceId } = useWorkspace();
-  const queryClient = useQueryClient();
-
-  const formsQuery = useQuery({
-    queryKey: intakeFormsQueryKey(activeWorkspaceId),
-    enabled: !!activeWorkspaceId,
-    staleTime: 30_000,
-    queryFn: async () => apiClient.listRequestForms(),
-  });
-
-  const submissionsQuery = useQuery({
-    queryKey: intakeSubmissionsQueryKey(activeWorkspaceId),
-    enabled: !!activeWorkspaceId,
-    staleTime: 15_000,
-    queryFn: async () => apiClient.listIntakeSubmissions(),
-  });
-
-  const projectsQuery = useQuery<ProjectResponse[]>({
-    queryKey: intakeProjectsQueryKey(activeWorkspaceId),
-    enabled: !!activeWorkspaceId,
-    staleTime: 30_000,
-    queryFn: async () =>
-      apiClient.listProjects({
-        pageSize: 100,
-        sortBy: "name",
-        sortOrder: "asc",
-      }),
-  });
-
-  const membersQuery = useQuery<WorkspaceMemberResponse[]>({
-    queryKey: intakeMembersQueryKey(activeWorkspaceId),
-    enabled: !!activeWorkspaceId,
-    staleTime: 30_000,
-    queryFn: async () => apiClient.listWorkspaceMembers(activeWorkspaceId!),
-  });
-
-  const forms = useMemo(
-    () => (formsQuery.data ?? []).map(mapIntakeForm).filter((form) => form.isActive),
-    [formsQuery.data],
-  );
-
-  const submissions = useMemo(
-    () => (submissionsQuery.data ?? []).map(mapIntakeSubmission),
-    [submissionsQuery.data],
-  );
+  const [submissions, setSubmissions] = useState<IntakeSubmissionSurface[]>(MOCK_SUBMISSIONS);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
 
   const projectsById = useMemo(
-    () =>
-      new Map((projectsQuery.data ?? []).map((project) => [project.id, project])),
-    [projectsQuery.data],
+    () => new Map(MOCK_PROJECTS.map((project) => [project.id, project])),
+    [],
   );
 
   const membersById = useMemo(
-    () =>
-      new Map((membersQuery.data ?? []).map((member) => [member.userId, member])),
-    [membersQuery.data],
+    () => new Map(MOCK_MEMBERS.map((member) => [member.userId, member])),
+    [],
   );
 
   const submissionCounts = useMemo(
     () =>
-      new Map(forms.map((form) => [form.id, getSubmissionCountForForm(form.id, submissions)])),
-    [forms, submissions],
+      new Map(
+        MOCK_FORMS.map((form) => [form.id, getSubmissionCountForForm(form.id, submissions)]),
+      ),
+    [submissions],
   );
 
-  const invalidateIntake = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: intakeFormsQueryKey(activeWorkspaceId),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: intakeSubmissionsQueryKey(activeWorkspaceId),
-      }),
-    ]);
-  };
-
-  const submitMutation = useMutation({
-    mutationFn: async ({
-      form,
-      values,
-    }: {
-      form: IntakeFormSurface;
-      values: Record<string, string>;
-    }) =>
-      apiClient.submitIntakeRequest(form.slug, {
-        data: values,
-        submitterEmail: session?.user.email ?? null,
-        submitterName: session?.user.fullName ?? null,
-      }),
-    onSuccess: invalidateIntake,
-  });
-
-  const reviewMutation = useMutation({
-    mutationFn: async ({
-      submissionId,
-      status,
-      reviewNotes,
-    }: {
-      submissionId: string;
-      status: IntakeSurfaceStatus;
-      reviewNotes?: string | null;
-    }) => {
-      const input: IntakeReviewSubmissionRequest = {
-        status: toReviewStatus(status),
-        reviewNotes: reviewNotes ?? null,
-      };
-
-      return apiClient.reviewIntakeSubmission(submissionId, input);
-    },
-    onSuccess: invalidateIntake,
-  });
-
-  const convertMutation = useMutation({
-    mutationFn: async ({
-      form,
-      submission,
-    }: {
-      form: IntakeFormSurface;
-      submission: IntakeSubmissionSurface;
-    }) => {
-      const request = buildConvertToTaskRequest(form, submission);
-      if (!request) {
-        throw new Error("This form needs a default project before submissions can be converted.");
-      }
-
-      return apiClient.convertIntakeSubmissionToTask(submission.id, request);
-    },
-    onSuccess: invalidateIntake,
-  });
-
-  const coreError = formsQuery.error ?? submissionsQuery.error ?? null;
-  const hasDependencyWarning = Boolean(projectsQuery.error || membersQuery.error);
-
-  return {
-    activeWorkspaceId,
-    session,
-    forms,
-    submissions,
-    projects: projectsQuery.data ?? [],
-    members: membersQuery.data ?? [],
-    projectsById,
-    membersById,
-    submissionCounts,
-    formsQuery,
-    submissionsQuery,
-    projectsQuery,
-    membersQuery,
-    isLoading: formsQuery.isLoading || submissionsQuery.isLoading,
-    isRefreshing:
-      formsQuery.isFetching ||
-      submissionsQuery.isFetching ||
-      projectsQuery.isFetching ||
-      membersQuery.isFetching,
-    error: coreError,
-    dependencyWarning: hasDependencyWarning
-      ? "Some supporting intake metadata is temporarily unavailable, so names and project labels may be incomplete."
-      : null,
-    getSubmissionsForForm: (formId: string) =>
-      submissions.filter((submission) => submission.formId === formId),
-    getSubmissionCount: (formId: string) => submissionCounts.get(formId) ?? 0,
-    getProjectName: (projectId?: string | null) =>
-      projectId ? projectsById.get(projectId)?.name ?? null : null,
-    getMemberName: (userId?: string | null, fallbackEmail?: string | null) =>
-      userId
-        ? membersById.get(userId)?.fullName ?? fallbackEmail ?? "Workspace member"
-        : fallbackEmail ?? "Anonymous",
-    reviewSubmission: async (
+  const reviewSubmission = useCallback(
+    async (
       submissionId: string,
       status: Extract<IntakeSurfaceStatus, "inReview" | "accepted" | "rejected">,
       reviewNotes?: string | null,
-    ) => reviewMutation.mutateAsync({ submissionId, status, reviewNotes }),
-    submitRequest: async (form: IntakeFormSurface, values: Record<string, string>) =>
-      submitMutation.mutateAsync({ form, values }),
-    convertSubmission: async (form: IntakeFormSurface, submission: IntakeSubmissionSurface) =>
-      convertMutation.mutateAsync({ form, submission }),
+    ) => {
+      setIsReviewing(true);
+      await new Promise<void>((resolve) => setTimeout(resolve, 300));
+      setSubmissions((prev) =>
+        prev.map((sub) =>
+          sub.id === submissionId
+            ? {
+                ...sub,
+                status,
+                reviewedAt: new Date().toISOString(),
+                reviewNotes: reviewNotes ?? sub.reviewNotes,
+              }
+            : sub,
+        ),
+      );
+      setIsReviewing(false);
+    },
+    [],
+  );
+
+  const submitRequest = useCallback(
+    async (form: IntakeFormSurface, values: Record<string, string>) => {
+      setIsSubmitting(true);
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+      const newSubmission: IntakeSubmissionSurface = {
+        id: `sub-${Date.now()}`,
+        formId: form.id,
+        values,
+        rawValues: values,
+        status: "new",
+        submittedAt: new Date().toISOString(),
+        submitterEmail: "demo@example.com",
+        submitterUserId: null,
+        convertedTaskId: null,
+        reviewedAt: null,
+        reviewNotes: null,
+      };
+      setSubmissions((prev) => [newSubmission, ...prev]);
+      setIsSubmitting(false);
+    },
+    [],
+  );
+
+  const convertSubmission = useCallback(
+    async (form: IntakeFormSurface, submission: IntakeSubmissionSurface) => {
+      const request = buildConvertToTaskRequest(form, submission);
+      if (!request) {
+        throw new Error(
+          "This form needs a default project before submissions can be converted.",
+        );
+      }
+      setIsConverting(true);
+      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+      const taskId = `LP-${Math.floor(1000 + Math.random() * 9000)}`;
+      setSubmissions((prev) =>
+        prev.map((sub) =>
+          sub.id === submission.id
+            ? { ...sub, status: "converted" as IntakeSurfaceStatus, convertedTaskId: taskId }
+            : sub,
+        ),
+      );
+      setIsConverting(false);
+    },
+    [],
+  );
+
+  return {
+    forms: MOCK_FORMS,
+    submissions,
+    members: MOCK_MEMBERS,
+    projectsById,
+    membersById,
+    submissionCounts,
+    isLoading: false,
+    isRefreshing: false,
+    error: null,
+    dependencyWarning: null,
+    getSubmissionsForForm: (formId: string) =>
+      submissions.filter((sub) => sub.formId === formId),
+    getSubmissionCount: (formId: string) => submissionCounts.get(formId) ?? 0,
+    getProjectName: (projectId?: string | null) =>
+      projectId ? (projectsById.get(projectId)?.name ?? null) : null,
+    getMemberName: (userId?: string | null, fallbackEmail?: string | null) =>
+      userId
+        ? (membersById.get(userId)?.fullName ?? fallbackEmail ?? "Workspace member")
+        : (fallbackEmail ?? "Anonymous"),
+    reviewSubmission,
+    submitRequest,
+    convertSubmission,
     canConvertSubmission: (form: IntakeFormSurface, submission: IntakeSubmissionSurface) =>
       Boolean(form.projectId) && submission.status === "accepted",
-    refresh: async () => {
-      await Promise.all([
-        formsQuery.refetch(),
-        submissionsQuery.refetch(),
-        projectsQuery.refetch(),
-        membersQuery.refetch(),
-      ]);
-    },
-    isSubmitting: submitMutation.isPending,
-    isReviewing: reviewMutation.isPending,
-    isConverting: convertMutation.isPending,
-    isWorkspaceReady: !!activeWorkspaceId,
+    refresh: async () => {},
+    isSubmitting,
+    isReviewing,
+    isConverting,
+    isWorkspaceReady: true,
   };
 }

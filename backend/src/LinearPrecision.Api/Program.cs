@@ -165,8 +165,18 @@ builder.Services.AddAuthorizationPolicies();
 // 3. CROSS-CUTTING SERVICES
 // ═══════════════════════════════════════════════
 
+// JSON options — accept string enums from frontend (matches TypeScript contract)
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
+
 // MVC Controllers (needed for AuthController)
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 // MediatR
 builder.Services.AddMediatR(cfg =>

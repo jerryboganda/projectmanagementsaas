@@ -1,0 +1,137 @@
+# Standalone VPS production stack for projectmanagement.polytronx.com
+# - All services on internal lp_net
+# - web and api additionally on nginx-proxy-manager_default for NPM routing
+# - No host ports published (all traffic via NPM)
+services:
+  web:
+    container_name: pm-web
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_SIGNALR_BASE_URL: ${NEXT_PUBLIC_SIGNALR_BASE_URL}
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+      - NEXT_PUBLIC_SIGNALR_BASE_URL=${NEXT_PUBLIC_SIGNALR_BASE_URL}
+      - INTERNAL_API_URL=http://pm-api:8080
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - lp_net
+      - npm_net
+
+  api:
+    container_name: pm-api
+    build:
+      context: ./backend
+      dockerfile: src/LinearPrecision.Api/Dockerfile
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=pm-postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      - ConnectionStrings__Redis=pm-redis:6379
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - Storage__ServiceUrl=http://pm-minio:9000
+      - Storage__BucketName=${MINIO_BUCKET}
+      - Storage__AccessKey=${MINIO_ROOT_USER}
+      - Storage__SecretKey=${MINIO_ROOT_PASSWORD}
+      - Cors__AllowedOrigins__0=${PUBLIC_ORIGIN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - lp_net
+      - npm_net
+
+  worker:
+    container_name: pm-worker
+    build:
+      context: ./backend
+      dockerfile: src/LinearPrecision.Worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=pm-postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      - ConnectionStrings__Redis=pm-redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lp_net
+
+  postgres:
+    container_name: pm-postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - lp_net
+
+  redis:
+    container_name: pm-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - lp_net
+
+  minio:
+    container_name: pm-minio
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - lp_net
+
+volumes:
+  pgdata:
+  miniodata:
+
+networks:
+  lp_net:
+    driver: bridge
+  npm_net:
+    name: nginx-proxy-manager_default
+    external: true

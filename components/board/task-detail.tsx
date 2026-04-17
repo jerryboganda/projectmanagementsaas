@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Check,
@@ -117,13 +118,16 @@ function Avatar({
   const dim = size === 'sm' ? 'size-7' : 'size-8';
   const text = size === 'sm' ? 'text-[10px]' : 'text-xs';
 
+  const pixelSize = size === 'sm' ? 28 : 32;
   return avatarUrl ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
+    <Image
       src={avatarUrl}
       alt={name}
       title={name}
+      width={pixelSize}
+      height={pixelSize}
       className={cn(dim, 'rounded-full object-cover')}
+      unoptimized
     />
   ) : (
     <span

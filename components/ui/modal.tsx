@@ -4,6 +4,7 @@ import { useEffect, useCallback, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { overlayVariants, scalePopVariants } from '@/lib/motion';
 
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
 
@@ -57,20 +58,20 @@ export function Modal({
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           {/* Backdrop */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={overlayVariants}
             className="absolute inset-0 bg-black/60"
             onClick={onClose}
           />
 
           {/* Modal */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            variants={scalePopVariants}
             className={cn(
               'relative w-full mx-4 bg-neutral-surface border border-neutral-border rounded-lg shadow-2xl flex flex-col max-h-[85vh]',
               sizeClasses[size],

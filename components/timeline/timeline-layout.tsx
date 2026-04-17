@@ -9,8 +9,7 @@ import { AnimatePresence } from "motion/react";
 import { Loader2, AlertTriangle, RefreshCcw, GanttChart } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { timelineStatusLabel, type TimelineItem } from "./data";
-import { useTimelineData } from "@/hooks/use-timeline-data";
-import type { TimelineUpdateInput, TimelineCreateTaskInput } from "@/hooks/use-timeline-data";
+import { useTimelineData, type TimelineUpdateInput, type TimelineCreateTaskInput } from "@/hooks/use-timeline-data";
 
 export function TimelineLayout() {
   const {

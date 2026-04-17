@@ -758,16 +758,16 @@ builder.Services.AddAuthorizationBuilder()
 - [ ] `POST /api/v1/billing/checkout` -- create Stripe Checkout session
 - [ ] `GET /api/v1/billing/subscription` -- current subscription info
 - [ ] `POST /api/v1/billing/portal` -- Stripe customer portal session
-- [ ] `POST /api/v1/billing/webhooks` -- Stripe webhook handler
+- [ ] `POST /api/v1/billing/webhook` -- Stripe webhook handler
   - Handle: `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`
 - [ ] Entitlement middleware: check plan limits on create operations
 - [ ] Frontend: billing settings page
 
-**Week 20: Audit Log**
+**Week 20: Audit Events**
 - [ ] Audit log entity: `actor`, `action`, `entity_type`, `entity_id`, `before_json`, `after_json`, `ip_address`, `timestamp`
 - [ ] Auto-capture via EF Core `SaveChanges` interceptor
-- [ ] `GET /api/v1/audit-logs` -- query audit logs (admin only)
-- [ ] `GET /api/v1/audit-logs/export` -- CSV export
+- [ ] `GET /api/v1/admin/audit-events` -- query audit events (admin only)
+- [ ] `GET /api/v1/admin/audit-events/export` -- CSV export
 - [ ] Retention policy per plan tier
 
 ### Week 21-22: Email & Import/Export

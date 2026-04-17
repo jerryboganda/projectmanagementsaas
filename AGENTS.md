@@ -40,10 +40,32 @@ This repository is a mixed PM SaaS codebase:
 - Existing raw `<img>` warnings are accepted prototype debt for now.
 - Lint blockers must be fixed before task completion.
 
-## Agentic OS Autonomy & Auto-Use Policy
-ANY operating AI Agent MUST adhere to the Universal Operating Mandate:
-- **Skill Usage:** If a relevant installed skill (listed in `docs/agent-skills.md` or found in `.codex/skills/` / `.agents/skills/`) applies to a task, the agent MUST auto-use it without asking for permission. 
-- **Subagent Routing:** Large tasks must automatically trigger subagents without asking for permission, utilizing the mandatory target subagent topology below.
+## Agentic OS Autonomy & Auto-Use Policy — MANDATORY
+
+**THIS IS NON-NEGOTIABLE. Every AI agent operating in this workspace MUST auto-route tasks to the correct subagents and skills. NEVER ask the user which agent to use. NEVER ask permission to load a skill. NEVER skip validation after changes. Detect → Route → Execute → Validate automatically.**
+
+### Automatic Subagent Dispatch (always, without asking)
+- Task touches `components/`, `app/`, `hooks/`, `contexts/`, `lib/`, Tailwind, React, TypeScript frontend → delegate to `frontend-owner` subagent
+- Task touches `backend/`, C#, EF Core, .NET, endpoints, DTOs, validators → delegate to `backend-owner` subagent
+- Task needs codebase understanding before changes → delegate to `repo-cartographer` or `Explore` subagent first
+- Task is done and code was changed → delegate to `qa-validator` subagent automatically (NEVER skip)
+- Task spans both frontend and backend → delegate to BOTH `frontend-owner` and `backend-owner` sequentially
+- Task needs multi-perspective review → run parallel `Explore` subagents for each concern
+
+### Automatic Skill Loading (always, without asking)
+- New feature/page/component → read `.agents/skills/feature-plan/SKILL.md`
+- Bug/exception/stack trace → read `.agents/skills/bug-triage/SKILL.md`
+- Shared types or API contracts changed → read `.agents/skills/contract-check/SKILL.md`
+- Frontend wired to backend API → read `.agents/skills/api-integration/SKILL.md`
+- New backend module → read `.agents/skills/backend-module/SKILL.md`
+- UI changes completed → read `.agents/skills/ui-regression-check/SKILL.md`
+- Unfamiliar code area → read `.agents/skills/repo-discovery/SKILL.md`
+- Architecture/structure changed → read `.agents/skills/docs-sync/SKILL.md`
+
+### Automatic Validation (always, without asking)
+- After frontend changes: run `cmd /c npm run lint`, `cmd /c npm run typecheck`, `cmd /c npm run build`
+- After backend changes: run `dotnet test backend/LinearPrecision.sln --no-restore`
+- After cross-layer changes: run BOTH
 
 ## Mandatory Target Subagent Topology
 The orchestration layer defaults to mapping tasks to this specialized topology (which currently map to configurations in `.codex/agents/`):

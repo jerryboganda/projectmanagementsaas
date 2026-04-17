@@ -1,0 +1,671 @@
+plan_id: perf-integration
+objective: Investigate performance optimization and backend integration opportunities across the Project Management SaaS codebase
+focus_area: performance_and_backend_integration
+created_at: "2026-04-16"
+created_by: gem-researcher
+status: completed
+
+tldr: |
+  - Provider stack is 11 layers deep but well-memoized; the REAL re-render hotspot is app-data-context.tsx (800+ line monolith with ~500 lines of inline mock data) — though it has zero active consumers, making it dead code.
+  - Zero dynamic imports / code splitting anywhere in the codebase — every feature (Recharts, DnD, motion, docs editor, AI copilot) ships in the initial bundle.
+  - 12 feature data.ts files exist but only 1 (intake) still uses MOCK_ constants at runtime; the other 11 features have been migrated to TanStack Query + real API hooks.
+  - SignalR is wired for board only (4 events: TaskCreated/Updated/Moved/Deleted); no realtime for inbox, timeline, sprints, calendar, goals, or docs.
+  - All images use next/image correctly; no raw <img> tags found in component code.
+  - TanStack Query is properly configured with 30s staleTime, retry:1, but has no gcTime override (defaults to 5min), no prefetching, and no placeholder/initialData patterns beyond one case.
+
+research_metadata:
+  methodology: "Hybrid retrieval: semantic_search + grep_search for pattern scanning, read_file for detailed examination of key files. 3-pass complex analysis."
+  scope: "Full frontend codebase: next.config.ts, package.json, all hooks/, all contexts/, component data.ts files, app/ route pages, lib/ utilities"
+  confidence: high
+  coverage: 88
+  decision_blockers: 0
+  research_blockers: 0
+
+files_analyzed:
+  - file: next.config.ts
+    path: next.config.ts
+    purpose: Next.js build and runtime configuration
+    key_elements:
+      - element: nextConfig
+        type: variable
+        location: "next.config.ts:3"
+        description: "No bundle analyzer, no experimental optimizePackageImports, no splitChunks customization. output: 'standalone' is set. transpilePackages includes 'motion'."
+    language: TypeScript
+    lines: 33
+
+  - file: package.json
+    path: package.json
+    purpose: Dependency manifest
+    key_elements:
+      - element: dependencies
+        type: variable
+        location: "package.json:18"
+        description: "Heavy deps: recharts (3.8), motion (12.23), @hello-pangea/dnd (18.0), react-markdown (10.1), @google/genai (1.17), @microsoft/signalr (10.0). No bundle-analyzer in devDeps."
+    language: JSON
+    lines: 52
+
+  - file: app/providers.tsx
+    path: app/providers.tsx
+    purpose: Root provider composition (11 levels deep)
+    key_elements:
+      - element: Providers
+        type: function
+        location: "app/providers.tsx:19"
+        description: "QueryClientProvider > SidebarProvider > AuthProvider > WorkspaceProvider > Suspense > AppShellGuard > RealtimeProvider > InboxProvider > ToastProvider > AiCopilotProvider > CommandPaletteProvider. QueryClient staleTime=30s, retry=1, refetchOnWindowFocus=false."
+      - element: QueryClient
+        type: variable
+        location: "app/providers.tsx:21"
+        description: "Created via useState lazy init (correct pattern). No gcTime override, no global onError handler."
+    language: TypeScript
+    lines: 63
+
+  - file: app/layout.tsx
+    path: app/layout.tsx
+    purpose: Root layout with fonts and Providers
+    key_elements:
+      - element: RootLayout
+        type: function
+        location: "app/layout.tsx:22"
+        description: "Inter + JetBrains_Mono Google fonts loaded via next/font (correct). Body has suppressHydrationWarning. Single Providers wrapper."
+    language: TypeScript
+    lines: 35
+
+  - file: contexts/realtime-context.tsx
+    path: contexts/realtime-context.tsx
+    purpose: SignalR hub connection management
+    key_elements:
+      - element: RealtimeProvider
+        type: function
+        location: "contexts/realtime-context.tsx:23"
+        description: "Generic hub connection factory. Supports automatic reconnect [0, 2000, 10000, 30000]. Disconnects on workspace switch or token loss. LogLevel.None."
+      - element: connect
+        type: function
+        location: "contexts/realtime-context.tsx:52"
+        description: "Takes hub path, creates/reuses HubConnection. Only consumer is use-board-data.ts (/hubs/board)."
+    language: TypeScript
+    lines: 103
+
+  - file: contexts/app-data-context.tsx
+    path: contexts/app-data-context.tsx
+    purpose: Legacy monolith context with inline mock data
+    key_elements:
+      - element: AppDataProvider
+        type: function
+        location: "contexts/app-data-context.tsx"
+        description: "800+ line file containing USERS, PROJECTS, TASKS, GOALS, INITIATIVES, SPRINTS, AUTOMATIONS, TIME_ENTRIES, TEMPLATES, REQUEST_FORMS, REQUEST_SUBMISSIONS, CALENDAR_ITEMS as inline mock constants. NOT in the provider tree. ZERO active consumers (useAppData not called in any component or page)."
+    language: TypeScript
+    lines: 815
+
+  - file: hooks/use-board-data.ts
+    path: hooks/use-board-data.ts
+    purpose: Board feature data hook — fully integrated with API + SignalR
+    key_elements:
+      - element: useBoardData
+        type: function
+        location: "hooks/use-board-data.ts"
+        description: "Full TanStack Query integration with useQuery for tasks/projects/members/comments/checklist/watchers/attachments. useMutation with optimistic updates for status changes. SignalR subscription for TaskCreated/Updated/Moved/Deleted."
+    language: TypeScript
+    lines: 280
+
+  - file: hooks/use-intake-data.ts
+    path: hooks/use-intake-data.ts
+    purpose: Intake feature data hook — STILL MOCK DATA
+    key_elements:
+      - element: useIntakeData
+        type: function
+        location: "hooks/use-intake-data.ts:16"
+        description: "Uses useState initialized with MOCK_SUBMISSIONS, MOCK_FORMS, MOCK_PROJECTS, MOCK_MEMBERS from @/components/intake/data. No TanStack Query, no API calls. All mutations are local state with artificial setTimeout delays."
+    language: TypeScript
+    lines: 120
+
+  - file: hooks/use-projects-data.ts
+    path: hooks/use-projects-data.ts
+    purpose: Projects feature data hook — fully integrated
+    key_elements:
+      - element: useProjectsData
+        type: function
+        location: "hooks/use-projects-data.ts:18"
+        description: "useQuery for project list and detail with staleTime:30s. useMutation for toggleFavorite with full optimistic update pattern (cancelQueries, snapshot, rollback)."
+    language: TypeScript
+    lines: 80
+
+  - file: components/reports/reports-surface.tsx
+    path: components/reports/reports-surface.tsx
+    purpose: Reports visualization — Recharts consumer
+    key_elements:
+      - element: ReportsSurface
+        type: function
+        location: "components/reports/reports-surface.tsx"
+        description: "Imports LineChart, BarChart, ComposedChart from recharts. Not dynamically imported — ships in main bundle. Only one component file uses recharts."
+    language: TypeScript
+    lines: 60
+
+  - file: components/board/board-layout.tsx
+    path: components/board/board-layout.tsx
+    purpose: Board page layout — DnD consumer
+    key_elements:
+      - element: BoardLayout
+        type: function
+        location: "components/board/board-layout.tsx:17"
+        description: "Imports DropResult from @hello-pangea/dnd. Proper useMemo for boardData, useCallback for handlers. Heavy component (~200 lines) with filtering/grouping logic."
+    language: TypeScript
+    lines: 200
+
+patterns_found:
+  - category: architecture
+    pattern: "Feature hooks migrated to TanStack Query"
+    description: "Most feature hooks (board, projects, dashboard, goals, calendar, reports, settings, documents, automations, sprints, templates, time-tracking, workload, timeline, portfolio) use TanStack Query with real API client calls. Only intake remains on mock data."
+    examples:
+      - file: hooks/use-board-data.ts
+        location: "hooks/use-board-data.ts:3"
+        snippet: "import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'"
+      - file: hooks/use-projects-data.ts
+        location: "hooks/use-projects-data.ts:3"
+        snippet: "import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Zero dynamic imports / code splitting"
+    description: "No usage of next/dynamic or React.lazy found in any .tsx file. All components, including heavy ones (Recharts charts, @hello-pangea/dnd, motion animations, docs editor, AI copilot panel), are statically imported."
+    examples:
+      - file: components/reports/reports-surface.tsx
+        location: "components/reports/reports-surface.tsx:1"
+        snippet: "import { LineChart, Line, BarChart, Bar, ... } from 'recharts'"
+      - file: components/board/board-layout.tsx
+        location: "components/board/board-layout.tsx:5"
+        snippet: "import { DropResult } from '@hello-pangea/dnd'"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Dead legacy context not in provider tree"
+    description: "app-data-context.tsx is an 800+ line file with ~500 lines of inline mock data. AppDataProvider is NOT rendered in the provider tree (providers.tsx). useAppData() has zero callers. This is dead code contributing to module graph size."
+    examples:
+      - file: contexts/app-data-context.tsx
+        location: "contexts/app-data-context.tsx:494"
+        snippet: "const AppDataContext = createContext<AppDataContextType | undefined>(undefined)"
+    prevalence: rare
+
+  - category: naming
+    pattern: "Consistent query key factories"
+    description: "All hooks define typed query key factory functions following the pattern: featureQueryKey(workspaceId) → ['feature', workspaceId, ...] as const."
+    examples:
+      - file: hooks/use-board-data.ts
+        location: "hooks/use-board-data.ts:31"
+        snippet: "function tasksQueryKey(workspaceId: string | null) { return ['board', workspaceId, 'tasks'] as const; }"
+      - file: hooks/use-goals-data.ts
+        location: "hooks/use-goals-data.ts:33"
+        snippet: "function goalsQueryKey(workspaceId: string | null) { return ['goals', workspaceId] as const; }"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Image optimization via next/image"
+    description: "All 20+ image import sites use next/image Image component. No raw <img> tags in component code. picsum.photos is configured in next.config.ts remotePatterns."
+    examples:
+      - file: components/header.tsx
+        location: "components/header.tsx:15"
+        snippet: "import Image from 'next/image'"
+      - file: components/board/task-card.tsx
+        location: "components/board/task-card.tsx:3"
+        snippet: "import Image from 'next/image'"
+    prevalence: common
+
+  - category: architecture
+    pattern: "SignalR only wired for board"
+    description: "Only hooks/use-board-data.ts subscribes to SignalR events (TaskCreated, TaskUpdated, TaskMoved, TaskDeleted on /hubs/board). No other feature hooks use the realtime context despite it being a generic connection factory."
+    examples:
+      - file: hooks/use-board-data.ts
+        location: "hooks/use-board-data.ts:216-219"
+        snippet: "connection.on('TaskCreated', handleTaskCreated); connection.on('TaskUpdated', handleTaskUpdated); connection.on('TaskMoved', handleTaskMoved); connection.on('TaskDeleted', handleTaskDeleted);"
+    prevalence: rare
+
+  - category: architecture
+    pattern: "Sidebar and Header re-rendered on every route"
+    description: "Every app/*/page.tsx imports and renders <Sidebar /> and <Header /> directly. These are not in the layout — they re-mount on every navigation. This is a pattern issue for perceived performance."
+    examples:
+      - file: app/board/page.tsx
+        location: "app/board/page.tsx:3-4"
+        snippet: "import { Sidebar } from '@/components/sidebar'; import { Header } from '@/components/header';"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Provider memoization correctly applied"
+    description: "SidebarContext uses useCallback for state setters. WorkspaceContext uses useMemo for its value. AuthContext follows same pattern. QueryClient uses useState lazy init. No cascading re-render from provider layer."
+    examples:
+      - file: contexts/sidebar-context.tsx
+        location: "contexts/sidebar-context.tsx:17-19"
+        snippet: "const openMobile = useCallback(() => setIsMobileOpen(true), [])"
+      - file: contexts/workspace-context.tsx
+        location: "contexts/workspace-context.tsx:20"
+        snippet: "const value = useMemo<WorkspaceContextValue>(() => { ... }, [session, setActiveWorkspaceId])"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Motion animations imported everywhere"
+    description: "15+ components import motion/AnimatePresence from 'motion/react'. The 'motion' package is in transpilePackages but not code-split. Every page that renders animated components pulls the full motion runtime."
+    examples:
+      - file: components/sidebar.tsx
+        location: "components/sidebar.tsx:4"
+        snippet: "import { motion, AnimatePresence } from 'motion/react'"
+      - file: components/workload/workload-surface.tsx
+        location: "components/workload/workload-surface.tsx:4"
+        snippet: "import { motion } from 'motion/react'"
+    prevalence: common
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: "QueryClient (TanStack Query)"
+      responsibility: "Client-side data cache and async state management"
+      location: "app/providers.tsx"
+      relationship_to_domain: "Central to all data fetching performance; staleTime and gcTime settings directly affect cache hits and refetch frequency"
+    - component: "RealtimeProvider (SignalR)"
+      responsibility: "WebSocket hub connection factory"
+      location: "contexts/realtime-context.tsx"
+      relationship_to_domain: "Under-utilized; only board uses it. Expanding coverage reduces polling and improves perceived performance"
+    - component: "AppDataProvider (LEGACY)"
+      responsibility: "Monolith mock data context"
+      location: "contexts/app-data-context.tsx"
+      relationship_to_domain: "Dead code. 815 lines contributing to module graph and build time."
+    - component: "Feature data hooks"
+      responsibility: "Per-feature TanStack Query wrappers"
+      location: "hooks/use-*.ts (17 files)"
+      relationship_to_domain: "Primary data loading layer; performance depends on query key design, caching, and deduplication"
+
+  interfaces_used_by_domain:
+    - interface: "LinearPrecisionApiClient"
+      location: "lib/api/client.ts"
+      usage_pattern: "All hooks access via useAuth().apiClient. REST fetch wrapper over the backend API."
+    - interface: "HubConnection"
+      location: "@microsoft/signalr"
+      usage_pattern: "Created by RealtimeProvider.connect(hubPath). Board subscribes to 4 events."
+
+  data_flow_involving_domain: |
+    Page renders → hooks call useQuery → QueryClient checks cache (staleTime 30s) → if stale, fetches via apiClient → response cached → components re-render with data.
+    For board only: SignalR pushes events → invalidateQueries → refetch → UI updates.
+    For all other features: data is only refreshed on remount or manual refetch.
+
+  key_relationships_to_domain:
+    - from: "Feature hooks"
+      to: "lib/api/client.ts"
+      relationship: calls
+    - from: "Feature hooks"
+      to: "TanStack Query"
+      relationship: imports
+    - from: "hooks/use-board-data.ts"
+      to: "contexts/realtime-context.tsx"
+      relationship: calls
+    - from: "app/providers.tsx"
+      to: "All contexts"
+      relationship: composes
+
+related_technology_stack:
+  languages_used_in_domain:
+    - TypeScript
+  frameworks_used_in_domain:
+    - name: "Next.js 15"
+      usage_in_domain: "App Router, route-based code splitting (per-page chunks), next/image, next/font"
+    - name: "React 19"
+      usage_in_domain: "Component rendering, hooks, Suspense boundary"
+    - name: "TanStack Query 5.95"
+      usage_in_domain: "All data fetching, caching, mutations, optimistic updates"
+  libraries_used_in_domain:
+    - name: "recharts 3.8"
+      purpose_in_domain: "Chart rendering in reports-surface.tsx — heavy SVG library, ~200KB gzipped"
+    - name: "@hello-pangea/dnd 18.0"
+      purpose_in_domain: "Drag-and-drop in board — medium weight, ~40KB gzipped"
+    - name: "motion 12.23"
+      purpose_in_domain: "Animations across 15+ components — ~30KB gzipped"
+    - name: "@microsoft/signalr 10.0"
+      purpose_in_domain: "WebSocket realtime — only used by board feature"
+    - name: "react-markdown 10.1"
+      purpose_in_domain: "Markdown rendering in docs editor — includes remark-gfm"
+    - name: "@google/genai 1.17"
+      purpose_in_domain: "AI copilot feature — Google Generative AI SDK"
+
+related_conventions:
+  naming_patterns_in_domain: "Query keys follow [feature, workspaceId, ...segments] pattern. Hooks named use-{feature}-data.ts."
+  structure_of_domain: "Each feature has components/{feature}/ with layout/surface/toolbar/detail/data files. Data hooks in hooks/ directory."
+  error_handling_in_domain: "TanStack Query retry:1 for queries, retry:0 for mutations. No global error boundary for query errors."
+  testing_in_domain: "No frontend unit tests found for hooks or components. Only E2E via Playwright."
+  documentation_in_domain: "docs/frontend-to-backend-integration-matrix.md documents recommended staleTime per feature but implementation diverges."
+
+related_dependencies:
+  internal:
+    - component: "lib/api/client.ts"
+      relationship_to_domain: "All API calls flow through this client"
+      direction: outbound
+    - component: "lib/api/contracts.ts"
+      relationship_to_domain: "Shared TypeScript types for API request/response shapes"
+      direction: outbound
+    - component: "contexts/auth-context.tsx"
+      relationship_to_domain: "Provides apiClient and session to all hooks"
+      direction: inbound
+  external:
+    - name: "@tanstack/react-query"
+      purpose_for_domain: "Core data fetching and caching"
+    - name: "@microsoft/signalr"
+      purpose_for_domain: "WebSocket realtime connections"
+
+testing_patterns:
+  framework: "Playwright (E2E only)"
+  coverage_areas:
+    - "No unit test coverage for data hooks"
+    - "No component-level testing"
+  test_organization: "tests/ directory with Playwright specs"
+  mock_patterns:
+    - "hooks/use-intake-data.ts uses inline MOCK_ constants"
+    - "contexts/app-data-context.tsx has extensive mock data (dead code)"
+
+# ═══════════════════════════════════════════════════════════════
+# RESEARCH FINDINGS — PRIORITIZED IMPROVEMENTS
+# ═══════════════════════════════════════════════════════════════
+
+top_15_performance_improvements:
+  - rank: 1
+    title: "Dynamic import Recharts (code splitting)"
+    category: bundle_size
+    impact: high
+    effort: low
+    description: |
+      recharts is ~200KB gzipped and only used by components/reports/reports-surface.tsx.
+      Wrap with next/dynamic: `const ReportsSurface = dynamic(() => import('./reports-surface'), { ssr: false })`.
+      Saves ~200KB from every non-reports page bundle.
+
+  - rank: 2
+    title: "Dynamic import @hello-pangea/dnd"
+    category: bundle_size
+    impact: high
+    effort: low
+    description: |
+      DnD library (~40KB) only used in board feature. Dynamic import board-surface.tsx or the DnD wrapper.
+      Removes DnD from all non-board pages.
+
+  - rank: 3
+    title: "Lift Sidebar and Header into app layout"
+    category: rendering_performance
+    impact: high
+    effort: medium
+    description: |
+      Currently every page.tsx re-imports and re-mounts <Sidebar> and <Header>.
+      Move to a shared layout.tsx (e.g., app/(workspace)/layout.tsx) so they persist across navigation.
+      Eliminates re-render and re-mount of sidebar on every route change.
+
+  - rank: 4
+    title: "Delete dead app-data-context.tsx"
+    category: bundle_size
+    impact: medium
+    effort: low
+    description: |
+      815-line file with zero consumers. Contains ~500 lines of inline mock data objects.
+      Removing it eliminates dead code from the module graph and speeds up builds.
+
+  - rank: 5
+    title: "Wire SignalR for inbox/notifications"
+    category: realtime
+    impact: high
+    effort: medium
+    description: |
+      Inbox currently only refreshes on mount. Adding SignalR subscription for notification events
+      (NotificationCreated, NotificationRead) via /hubs/notifications would enable real-time
+      unread badge updates without polling.
+
+  - rank: 6
+    title: "Migrate intake from mock data to real API"
+    category: backend_integration
+    impact: high
+    effort: medium
+    description: |
+      use-intake-data.ts is the only remaining feature hook using MOCK_ data with useState.
+      Needs refactor to useQuery/useMutation pattern matching all other hooks.
+      Backend endpoints exist (IntakeFormResponse, IntakeSubmissionResponse in contracts.ts).
+
+  - rank: 7
+    title: "Add optimistic updates to more mutations"
+    category: data_fetching
+    impact: medium
+    effort: medium
+    description: |
+      Only use-projects-data.ts (toggleFavorite) and use-board-data.ts (updateTaskStatus) use
+      optimistic updates. Calendar, goals, documents, settings mutations just invalidate on success.
+      Adding optimistic patterns for frequent actions (goal progress, calendar item drag) improves perceived latency.
+
+  - rank: 8
+    title: "Dynamic import motion/react for heavy animation consumers"
+    category: bundle_size
+    impact: medium
+    effort: medium
+    description: |
+      motion is used in 15+ components. While tree-shaking helps, the AnimatePresence import
+      pulls in the full animation engine. Consider dynamic importing heavy consumers like
+      onboarding-wizard, AI copilot panel, and settings panels.
+
+  - rank: 9
+    title: "Add gcTime tuning per feature"
+    category: data_fetching
+    impact: medium
+    effort: low
+    description: |
+      Global gcTime defaults to 5 minutes. Stale reference data (members, templates, workspace settings)
+      should have longer gcTime (30min). Frequently-updated data (tasks, notifications) should keep 5min.
+      docs/frontend-to-backend-integration-matrix.md recommends gcTime:5min but it's not set explicitly.
+
+  - rank: 10
+    title: "Wire SignalR for document collaboration"
+    category: realtime
+    impact: medium
+    effort: high
+    description: |
+      docs-editor.tsx is a rich document editor with no realtime collaboration.
+      Subscribing to /hubs/documents for DocumentUpdated/CursorMoved events would
+      enable multi-user editing without polling.
+
+  - rank: 11
+    title: "Add prefetching for sidebar navigation targets"
+    category: data_fetching
+    impact: medium
+    effort: low
+    description: |
+      No prefetchQuery calls exist. When hovering sidebar nav items, prefetch the destination
+      feature's query data. E.g., hovering "Board" prefetches tasks. Low cost, high UX improvement.
+
+  - rank: 12
+    title: "Dynamic import react-markdown + remark-gfm"
+    category: bundle_size
+    impact: medium
+    effort: low
+    description: |
+      react-markdown + remark-gfm only used in docs editor. Dynamic import the markdown
+      preview component to avoid bundling markdown parsing on non-docs pages.
+
+  - rank: 13
+    title: "Add @next/bundle-analyzer to devDependencies"
+    category: bundle_size
+    impact: low
+    effort: low
+    description: |
+      No bundle analysis tooling exists. Adding @next/bundle-analyzer enables visibility
+      into actual chunk sizes and identifies optimization targets with data.
+
+  - rank: 14
+    title: "Wire SignalR for sprint/timeline updates"
+    category: realtime
+    impact: medium
+    effort: medium
+    description: |
+      Sprints and timeline are collaborative surfaces where multiple users modify task status
+      and dates. Adding SprintUpdated/TaskReordered events would keep views in sync.
+
+  - rank: 15
+    title: "Add next.config experimental.optimizePackageImports"
+    category: bundle_size
+    impact: low
+    effort: low
+    description: |
+      Next.js 15 supports experimental.optimizePackageImports for libraries like lucide-react,
+      date-fns, and recharts. Adding this config can automatically tree-shake barrel exports
+      and reduce unused import costs.
+
+# ═══════════════════════════════════════════════════════════════
+# MOCK-TO-REAL MIGRATION STATUS
+# ═══════════════════════════════════════════════════════════════
+
+mock_to_real_migration_status:
+  fully_integrated:
+    - feature: board
+      hook: hooks/use-board-data.ts
+      realtime: true
+      notes: "Full CRUD + SignalR + optimistic updates"
+    - feature: projects
+      hook: hooks/use-projects-data.ts
+      realtime: false
+      notes: "List + detail + favorite toggle with optimistic updates"
+    - feature: dashboard
+      hook: hooks/use-dashboard-data.ts
+      realtime: false
+      notes: "KPIs, tasks, projects, activity via API"
+    - feature: goals
+      hook: hooks/use-goals-data.ts
+      realtime: false
+      notes: "CRUD + initiatives"
+    - feature: calendar
+      hook: hooks/use-calendar-data.ts
+      realtime: false
+      notes: "CRUD for calendar items"
+    - feature: reports
+      hook: hooks/use-reports-data.ts
+      realtime: false
+      notes: "Projects, tasks, velocity, workload analytics"
+    - feature: settings
+      hook: hooks/use-settings-data.ts
+      realtime: false
+      notes: "Profile, workspace settings, notification prefs, members"
+    - feature: documents
+      hook: hooks/use-documents-data.ts
+      realtime: false
+      notes: "CRUD for documents"
+    - feature: automations
+      hook: hooks/use-automations-data.ts
+      realtime: false
+      notes: "CRUD + logs"
+    - feature: sprints
+      hook: hooks/use-sprints-data.ts
+      realtime: false
+      notes: "CRUD + task assignment + transitions"
+    - feature: templates
+      hook: hooks/use-templates-data.ts
+      realtime: false
+      notes: "List + create project from template"
+    - feature: time-tracking
+      hook: hooks/use-time-tracking-data.ts
+      realtime: false
+      notes: "CRUD + timer with server-side entry"
+    - feature: workload
+      hook: hooks/use-workload-data.ts
+      realtime: false
+      notes: "Projects, workload, tasks via API"
+    - feature: timeline
+      hook: hooks/use-timeline-data.ts
+      realtime: false
+      notes: "Projects, tasks, mutations with optimistic updates"
+    - feature: portfolio
+      hook: hooks/use-portfolio-data.ts
+      realtime: false
+      notes: "Goals, projects, members, CRUD"
+    - feature: inbox
+      hook: contexts/inbox-context.tsx
+      realtime: false
+      notes: "Notifications via API, mark as read, archive"
+
+  still_on_mock_data:
+    - feature: intake
+      hook: hooks/use-intake-data.ts
+      priority: P1
+      notes: "Only feature still using MOCK_ constants. Backend contracts exist (IntakeFormResponse, IntakeSubmissionResponse). Direct migration target."
+
+  dead_mock_data:
+    - feature: app-data-context
+      file: contexts/app-data-context.tsx
+      priority: P0_DELETE
+      notes: "815-line file with zero consumers. Contains USERS, PROJECTS, TASKS, GOALS, INITIATIVES, SPRINTS, AUTOMATIONS, TIME_ENTRIES, TEMPLATES, REQUEST_FORMS, REQUEST_SUBMISSIONS, CALENDAR_ITEMS. Dead code."
+
+# ═══════════════════════════════════════════════════════════════
+# SIGNALR / REALTIME STATUS
+# ═══════════════════════════════════════════════════════════════
+
+realtime_status:
+  infrastructure:
+    provider: contexts/realtime-context.tsx
+    status: "Working generic hub factory"
+    capabilities:
+      - "Auto-reconnect with backoff [0, 2s, 10s, 30s]"
+      - "Per-workspace hub connections"
+      - "JWT access token factory"
+      - "Disconnects on workspace switch"
+
+  connected_features:
+    - feature: board
+      hub: "/hubs/board"
+      events_subscribed:
+        - TaskCreated
+        - TaskUpdated
+        - TaskMoved
+        - TaskDeleted
+      join_method: "JoinBoard(projectId)"
+      invalidation_strategy: "invalidateQueries on any event"
+
+  missing_realtime:
+    - feature: inbox
+      recommended_hub: "/hubs/notifications"
+      events_needed: ["NotificationCreated", "NotificationRead", "NotificationArchived"]
+      impact: "High — badge/count would update without page refresh"
+    - feature: documents
+      recommended_hub: "/hubs/documents"
+      events_needed: ["DocumentUpdated", "DocumentDeleted", "CursorMoved"]
+      impact: "High — enables collaborative editing"
+    - feature: sprints
+      recommended_hub: "/hubs/board"
+      events_needed: ["SprintStarted", "SprintCompleted", "TaskReordered"]
+      impact: "Medium — sprint boards are collaborative"
+    - feature: timeline
+      recommended_hub: "/hubs/board"
+      events_needed: ["TaskUpdated", "TaskMoved"]
+      impact: "Medium — Gantt chart reflects task date changes"
+    - feature: calendar
+      recommended_hub: "/hubs/calendar"
+      events_needed: ["CalendarItemCreated", "CalendarItemUpdated", "CalendarItemDeleted"]
+      impact: "Low — calendar less frequently multi-user edited"
+    - feature: goals
+      recommended_hub: "/hubs/goals"
+      events_needed: ["GoalUpdated", "InitiativeUpdated"]
+      impact: "Low — goal tracking is periodic"
+
+open_questions:
+  - question: "Should app-data-context.tsx be deleted or preserved for e2e/demo mode?"
+    context: "It has zero runtime consumers but may be kept for demo/seed purposes"
+    type: nice_to_know
+    affects: ["bundle_size"]
+
+  - question: "What is the actual production bundle size?"
+    context: "No @next/bundle-analyzer configured. Cannot verify theoretical savings without baseline measurement."
+    type: research
+    affects: ["bundle_optimization"]
+
+  - question: "Are there backend SignalR hubs beyond /hubs/board?"
+    context: "Backend code not fully examined. Need to verify which hubs are already implemented before planning frontend wiring."
+    type: research
+    affects: ["realtime_expansion"]
+
+gaps:
+  - area: "Bundle size measurement"
+    description: "No bundle analyzer configured. All size estimates are theoretical based on package sizes, not measured chunk analysis."
+    impact: research_blocker
+    affects: ["bundle_optimization"]
+
+  - area: "Backend hub inventory"
+    description: "Only the frontend side was researched. Backend may or may not have additional SignalR hubs implemented."
+    impact: research_blocker
+    affects: ["realtime_expansion"]
+
+  - area: "Component-level profiling"
+    description: "No React DevTools profiling data available. Re-render hotspots are inferred from code patterns, not measured."
+    impact: nice_to_know
+    affects: ["rendering_performance"]

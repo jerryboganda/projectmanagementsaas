@@ -1,0 +1,10 @@
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Docs — Linear Precision',
+  description: 'Collaborative documentation for your team',
+};
+
+export default function DocsLayout({ children }: { children: React.ReactNode }) {
+  return children;
+}

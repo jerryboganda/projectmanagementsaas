@@ -1,0 +1,868 @@
+plan_id: ui-ux-polish
+objective: Investigate UI/UX improvement opportunities across the PM SaaS frontend for a deep enhancement pass
+focus_area: UI/UX Polish — visual consistency, accessibility, responsive design, loading states, animations, component library
+created_at: "2026-04-16"
+created_by: gem-researcher
+status: completed
+
+tldr: |
+  - Design system has only 4 CSS custom tokens; missing semantic tokens for spacing, typography scale, border-radius, shadows, elevation, and status colors — each feature surface re-invents these values via raw Tailwind.
+  - Severe accessibility gaps: zero ARIA labels on sidebar nav, no skip-link, no focus-visible rings anywhere, no aria-live regions, inconsistent keyboard navigation, and most interactive buttons lack accessible names.
+  - Responsive design is implemented for sidebar/header but board, calendar, timeline, docs, goals, and workload surfaces are desktop-only with no mobile-specific adaptations for their main content areas.
+  - Loading states are well-covered (Loader2 spinners + EmptyState) but there are no skeleton/shimmer placeholders (except automations), no route-level loading.tsx files, and error boundaries only exist at the root.
+  - Motion usage is good for panels/modals/details but lacks page transition animations, list stagger effects, and micro-interactions on buttons/inputs.
+  - Component library (components/ui/) has only 11 components — missing: Button, Input, Select, Textarea, Avatar, Tabs, Tooltip, Popover, Dropdown, Progress, Skeleton, Switch, Card, Table, Pagination, DatePicker, Dialog (non-modal).
+
+research_metadata:
+  methodology: "Hybrid retrieval: semantic_search + grep_search for pattern scanning, read_file for detailed examination across 30+ component files, file_search for missing route-level files"
+  scope: "Examined globals.css, sidebar, header, 5 feature surfaces (board, calendar, inbox, projects, goals), all 11 UI components, layout.tsx, providers.tsx, and pattern-scanned all components/**/*.tsx"
+  confidence: high
+  coverage: 78
+  decision_blockers: 0
+  research_blockers: 0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 1. DESIGN SYSTEM GAPS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+design_system_analysis:
+  current_tokens:
+    file: app/globals.css
+    variables:
+      - name: "--color-primary"
+        value: "#1313ec"
+      - name: "--color-background-dark"
+        value: "#0a0a0a"
+      - name: "--color-neutral-border"
+        value: "#222222"
+      - name: "--color-neutral-surface"
+        value: "#111111"
+      - name: "--font-sans"
+        value: "Inter via Google Fonts"
+      - name: "--font-mono"
+        value: "JetBrains Mono via Google Fonts"
+
+  missing_tokens:
+    - category: spacing
+      description: "No spacing scale tokens. Components use arbitrary values: p-2, p-3, p-4, p-5, p-6, px-1.5, px-2.5, py-0.5, gap-1, gap-2, gap-3, gap-4. No consistent spacing rhythm."
+      impact: high
+
+    - category: border-radius
+      description: "Mixed radius usage across features: rounded-sm (sidebar, header, board, automations), rounded-lg (board columns/cards, file-upload, docs, modal), rounded-xl (task-detail sections, settings), rounded-2xl (auth shell, docs editor), rounded-full (avatars, notification badge). No radius tokens defined."
+      examples:
+        - "sidebar nav items: rounded-sm"
+        - "board task cards: rounded-lg"
+        - "task-detail sections: rounded-xl"
+        - "auth pages: rounded-2xl"
+        - "modal: rounded-lg"
+      impact: high
+
+    - category: shadows
+      description: "No shadow tokens. Ad-hoc shadows: shadow-xl, shadow-2xl for modals/dropdowns. Drag shadow on task cards is inline. No consistent elevation system."
+      impact: medium
+
+    - category: typography
+      description: "No type scale tokens. Font sizes vary: text-[9px], text-[10px], text-[11px], text-[12px], text-[13px], text-[14px], text-[15px], text-sm, text-base, text-3xl. No heading hierarchy defined."
+      impact: high
+
+    - category: status-colors
+      description: "Status/semantic colors repeated inline across features without tokens. Emerald for success, Rose for danger, Amber for warning, Blue for info — each component redeclares these (e.g., badge.tsx, goals-surface.tsx, task-card.tsx, calendar-detail.tsx)."
+      impact: medium
+
+    - category: interactive-states
+      description: "Hover state pattern 'hover:bg-white/5' and 'hover:bg-white/[0.05]' used inconsistently — some use /5, others use /[0.03] or /[0.05] or /[0.02]. No active/pressed state token."
+      impact: medium
+
+    - category: surface-backgrounds
+      description: "Surface backgrounds have multiple competing patterns: bg-neutral-surface, bg-neutral-surface/30, bg-neutral-surface/50, bg-white/[0.02], bg-white/[0.03], bg-background-dark. No layered elevation system."
+      impact: medium
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 2. ACCESSIBILITY VIOLATIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+accessibility_violations:
+  critical:
+    - id: a11y-001
+      issue: "No skip-to-content link in layout"
+      file: app/layout.tsx
+      line: 30
+      wcag: "2.4.1 Bypass Blocks (Level A)"
+      description: "No skip navigation link. Users must tab through 20+ sidebar items to reach main content."
+
+    - id: a11y-002
+      issue: "Sidebar navigation has zero ARIA attributes"
+      file: components/sidebar.tsx
+      lines: "66-130"
+      wcag: "4.1.2 Name, Role, Value (Level A)"
+      description: "The <nav> element lacks aria-label. No nav link has aria-label or aria-current='page'. The mobile sidebar lacks role='dialog' and aria-modal='true'. Mobile close button lacks aria-label."
+
+    - id: a11y-003
+      issue: "No focus-visible indicators anywhere in the codebase"
+      file: "*"
+      wcag: "2.4.7 Focus Visible (Level AA)"
+      description: "grep for 'focus-visible' returns zero matches across all components. Buttons rely only on hover styles. Keyboard users have no visual focus indicator."
+
+    - id: a11y-004
+      issue: "Board task cards have no keyboard interaction"
+      file: components/board/task-card.tsx
+      wcag: "2.1.1 Keyboard (Level A)"
+      description: "Task cards use onClick on a div but no tabIndex, no role='button', no onKeyDown handler. Drag-and-drop has no keyboard alternative."
+
+    - id: a11y-005
+      issue: "Board columns and cards lack ARIA labels"
+      file: components/board/board-column.tsx
+      wcag: "4.1.2 Name, Role, Value (Level A)"
+      description: "Board columns have no role='region' or aria-label. Column action buttons (Plus, MoreHorizontal) lack aria-label. Column count badge has no accessible meaning."
+
+  serious:
+    - id: a11y-006
+      issue: "Inbox has no ARIA labels on interactive elements"
+      file: components/inbox/inbox-layout.tsx
+      wcag: "4.1.2 Name, Role, Value (Level A)"
+      description: "Zero aria-label matches in inbox components. Filter rail, list items, action buttons all lack accessible names."
+
+    - id: a11y-007
+      issue: "Goals surface has no ARIA for tree structure"
+      file: components/goals/goals-surface.tsx
+      wcag: "1.3.1 Info and Relationships (Level A)"
+      description: "Expandable goal tree has no role='tree', role='treeitem', aria-expanded attributes. Screen readers cannot understand the hierarchical goal structure."
+
+    - id: a11y-008
+      issue: "Modal does not trap focus"
+      file: components/ui/modal.tsx
+      wcag: "2.4.3 Focus Order (Level A)"
+      description: "Modal handles Escape key but does not implement focus trapping. Tab can escape the modal to background content."
+
+    - id: a11y-009
+      issue: "Color-only status indicators"
+      file: components/board/task-card.tsx
+      lines: "42-48"
+      wcag: "1.4.1 Use of Color (Level A)"
+      description: "Priority badges use only color (rose/amber/blue/slate) to convey priority level. No icons or text alternatives for color-blind users."
+
+    - id: a11y-010
+      issue: "No aria-live regions for dynamic content"
+      file: "*"
+      wcag: "4.1.3 Status Messages (Level AA)"
+      description: "Zero aria-live or role='status' or role='alert' across the codebase. Toast notifications, loading states, filter results counts, and real-time updates are invisible to screen readers."
+
+    - id: a11y-011
+      issue: "Projects list has no keyboard navigation pattern"
+      file: components/projects/projects-layout.tsx
+      wcag: "2.1.1 Keyboard (Level A)"
+      description: "No aria-label on project list or grid. No roving tabindex or arrow key navigation."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 3. RESPONSIVE DESIGN GAPS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+responsive_design:
+  implemented:
+    - component: Sidebar
+      file: components/sidebar.tsx
+      pattern: "Hidden on mobile (md:flex). Drawer with spring animation on mobile via useSidebar context."
+      quality: good
+
+    - component: Header
+      file: components/header.tsx
+      pattern: "Mobile hamburger toggle. Search bar hidden on mobile (md:flex). New-item label hidden on mobile (md:inline)."
+      quality: good
+
+    - component: Inbox
+      file: components/inbox/inbox-layout.tsx
+      pattern: "Master-detail pattern: list + detail side-by-side on desktop, stacked overlay on mobile with back button."
+      quality: good
+
+    - component: Settings
+      file: components/settings/settings-content.tsx
+      pattern: "Grid layouts with md:grid-cols breakpoints. Danger zone stacks on mobile (md:flex-row)."
+      quality: good
+
+  gaps:
+    - component: Board
+      file: components/board/board-surface.tsx
+      issue: "Board columns are fixed 320px width with horizontal scroll. No responsive adaptation: no column stacking, no card-only view for mobile. Horizontal scrolling is awkward on touch devices."
+      impact: high
+
+    - component: Calendar
+      file: components/calendar/calendar-surface.tsx
+      issue: "Month/week/day grids have no responsive breakpoints. Calendar cells use absolute positioning that assumes desktop width."
+      impact: high
+
+    - component: Timeline
+      file: components/timeline/
+      issue: "Gantt-style timeline renders as wide horizontal chart. No mobile adaptation or summary view."
+      impact: medium
+
+    - component: Goals tree
+      file: components/goals/goals-surface.tsx
+      issue: "Nested tree view with indentation levels. No responsive collapse or simplified view for mobile."
+      impact: medium
+
+    - component: Reports charts
+      file: components/reports/reports-surface.tsx
+      issue: "Uses Recharts ResponsiveContainer (good) but chart grid is lg:grid-cols-4 with no touch-friendly interactions."
+      impact: low
+
+    - component: Docs editor
+      file: components/docs/docs-editor.tsx
+      issue: "Sidebar + editor layout has no responsive handling. Three-column layout (sidebar, list, editor) does not stack on mobile."
+      impact: medium
+
+    - component: Workload
+      file: components/workload/
+      issue: "Resource allocation bars assume desktop width. No mobile-friendly summary view."
+      impact: medium
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 4. LOADING / ERROR / EMPTY STATES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+loading_states:
+  covered:
+    - feature: Board
+      file: components/board/board-layout.tsx
+      has_loading: true
+      loading_type: "EmptyState with text 'Loading board...'"
+      has_error: false
+      error_type: null
+      has_empty: true
+      empty_type: "EmptyState with contextual messages for filters, no-project, and no-tasks"
+
+    - feature: Calendar
+      file: components/calendar/calendar-layout.tsx
+      has_loading: true
+      loading_type: "Loader2 spinner with 'Loading calendar items...' text"
+      has_error: true
+      error_type: "Inline banner with AlertCircle icon and error message"
+      has_empty: true
+      empty_type: "EmptyState with search-aware messaging"
+
+    - feature: Inbox
+      file: components/inbox/inbox-layout.tsx
+      has_loading: true
+      loading_type: "Loader2 spinner with 'Loading inbox...' text"
+      has_error: true
+      error_type: "EmptyState 'Inbox unavailable' with Retry action"
+      has_empty: true
+      empty_type: "Placeholder with icon when no item selected"
+
+    - feature: Projects
+      file: components/projects/projects-layout.tsx
+      has_loading: false
+      loading_type: null
+      has_error: true
+      error_type: "Rose banner with refetch button"
+      has_empty: true
+      empty_type: "Implied via filtered list (no explicit EmptyState for empty projects)"
+
+    - feature: Automations
+      file: components/automations/automations-layout.tsx
+      has_loading: true
+      loading_type: "LoadingSkeleton component with shimmer placeholders"
+      has_error: false
+      error_type: null
+      has_empty: true
+      empty_type: "Custom EmptyState with create action"
+
+    - feature: Workload
+      file: components/workload/workload-layout.tsx
+      has_loading: true
+      loading_type: "Loader2 spinner"
+      has_error: true
+      error_type: "EmptyState with error message"
+      has_empty: true
+      empty_type: "Multiple EmptyState variants"
+
+    - feature: Goals
+      file: components/goals/goals-layout.tsx
+      has_loading: false
+      loading_type: null
+      has_error: false
+      error_type: null
+      has_empty: true
+      empty_type: "EmptyState in goals-surface.tsx"
+
+  gaps:
+    - issue: "No route-level loading.tsx files"
+      description: "No app/**/loading.tsx files exist. The only Suspense fallback is a blank dark div in providers.tsx. Route transitions have no visual feedback."
+      impact: high
+
+    - issue: "No route-level error.tsx files"
+      description: "No app/**/error.tsx files exist. Only ErrorBoundary at component level (components/error-boundary.tsx). Uncaught route errors show Next.js default error page."
+      impact: high
+
+    - issue: "No skeleton/shimmer components"
+      description: "Only automations has a LoadingSkeleton. Board, projects, calendar, inbox, goals, docs, timeline, workload all use plain spinner or text. No reusable Skeleton UI component."
+      impact: high
+
+    - issue: "Projects has no loading state"
+      description: "ProjectsLayout does not render a loading indicator while TanStack Query fetches. The empty grid flashes before data loads."
+      impact: medium
+
+    - issue: "Goals has no loading or error state"
+      description: "GoalsLayout directly renders GoalsSurface without checking loading/error from data hook."
+      impact: medium
+
+    - issue: "Inconsistent error patterns"
+      description: "Calendar uses inline banner, Projects uses rose banner with refetch, Inbox uses EmptyState with retry, Workload uses EmptyState. No unified error display pattern."
+      impact: medium
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 5. ANIMATION QUALITY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+animation_analysis:
+  current_usage:
+    - pattern: "Sidebar mobile drawer"
+      file: components/sidebar.tsx
+      type: "spring animation (damping: 25, stiffness: 300) for x-axis slide"
+      quality: good
+
+    - pattern: "Modal open/close"
+      file: components/ui/modal.tsx
+      type: "opacity + scale (0.95→1) with 150ms ease-out"
+      quality: good
+
+    - pattern: "Detail panel slide-in"
+      files: ["components/calendar/calendar-detail.tsx", "components/board/task-detail.tsx"]
+      type: "x: 100% → 0 with spring animation"
+      quality: good
+
+    - pattern: "Toast notifications"
+      file: components/ui/toast.tsx
+      type: "AnimatePresence with slide + opacity"
+      quality: good
+
+    - pattern: "Automations cards"
+      file: components/automations/automations-layout.tsx
+      type: "opacity + y-offset (12-18px) for enter/exit"
+      quality: good
+
+    - pattern: "Drag-and-drop feedback"
+      file: components/board/task-card.tsx
+      type: "CSS scale(1.02) + rotate(1deg) + shadow on drag"
+      quality: adequate
+
+  missing:
+    - opportunity: "Page/route transition animation"
+      description: "No AnimatePresence wrapping route content. Page switches are instant with no visual transition."
+      impact: high
+
+    - opportunity: "List item stagger animation"
+      description: "Board cards, project cards, inbox items, goal rows all appear instantly. No stagger-in effect for list/grid items."
+      impact: high
+
+    - opportunity: "Button press micro-interaction"
+      description: "All buttons use only CSS transition-colors. No scale-down on active press. No loading spinner state for async buttons."
+      impact: medium
+
+    - opportunity: "Input focus animation"
+      description: "Inputs use CSS transition for border color. No animated focus ring expansion or glow effect."
+      impact: low
+
+    - opportunity: "Empty state entrance"
+      description: "EmptyState renders without any animation. Could benefit from fade-in + slight y-offset."
+      impact: low
+
+    - opportunity: "Toolbar filter transitions"
+      description: "When switching views (list↔grid, month↔week↔day), content swaps instantly without crossfade."
+      impact: medium
+
+    - opportunity: "Progress bar animation"
+      description: "Goals progress bars and workload capacity bars render at final width instantly. No fill animation on mount."
+      impact: medium
+
+    - opportunity: "Notification badge bounce"
+      description: "Inbox unread badge appears/disappears without attention-drawing animation."
+      impact: low
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 6. COMPONENT LIBRARY GAPS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+component_library:
+  existing:
+    - name: activity-panel
+      file: components/ui/activity-panel.tsx
+      description: "Comment + activity feed panel for entities"
+
+    - name: ai-copilot
+      file: components/ui/ai-copilot.tsx
+      description: "AI assistant chat panel"
+
+    - name: badge
+      file: components/ui/badge.tsx
+      description: "Status/label badge with variants (default, success, warning, danger, info, outline)"
+
+    - name: breadcrumbs
+      file: components/ui/breadcrumbs.tsx
+      description: "Route-based breadcrumb navigation"
+
+    - name: command-palette
+      file: components/ui/command-palette.tsx
+      description: "Ctrl+K command palette with search"
+
+    - name: confirm-dialog
+      file: components/ui/confirm-dialog.tsx
+      description: "Danger/warning confirmation modal"
+
+    - name: empty-state
+      file: components/ui/empty-state.tsx
+      description: "Empty state with icon, title, description, optional action"
+
+    - name: form-field
+      file: components/ui/form-field.tsx
+      description: "Unified input/textarea/select form field with label and validation"
+
+    - name: keyboard-shortcuts-dialog
+      file: components/ui/keyboard-shortcuts-dialog.tsx
+      description: "Keyboard shortcuts help overlay"
+
+    - name: modal
+      file: components/ui/modal.tsx
+      description: "Animated modal with backdrop, sizes, header, footer"
+
+    - name: toast
+      file: components/ui/toast.tsx
+      description: "Toast notification system with types and actions"
+
+  missing_critical:
+    - name: Button
+      description: "No shared Button component. Every feature creates buttons inline with repeated classes. Need variants: primary, secondary, ghost, danger, outline. Sizes: sm, md, lg. States: loading, disabled."
+      instances_of_inline_buttons: "100+"
+
+    - name: Input
+      description: "No shared Input component. FormField wraps an input but is not used everywhere. Search inputs, filter inputs all redeclare styles."
+      instances_of_inline_inputs: "30+"
+
+    - name: Select
+      description: "No shared Select component. Every dropdown uses raw <select> with inconsistent styling."
+      instances_of_inline_selects: "20+"
+
+    - name: Avatar
+      description: "No shared Avatar component. User avatars are implemented inline in header, task cards, sidebar, inbox items, activity panel — each with slightly different sizing and fallback logic."
+      instances_of_inline_avatars: "15+"
+
+    - name: Skeleton
+      description: "No reusable Skeleton shimmer component. Only automations has an inline LoadingSkeleton function."
+
+    - name: Tooltip
+      description: "No Tooltip component. Interactive icons (Plus, MoreHorizontal, Settings, etc.) have no tooltip on hover. Some have title attribute but most have nothing."
+
+  missing_useful:
+    - name: Tabs
+      description: "Feature toolbars implement tab-like view switching (list/grid, month/week/day) without a shared Tabs component."
+
+    - name: Dropdown / Popover
+      description: "All dropdowns are implemented inline with useState + useRef + click-outside detection. No shared pattern."
+
+    - name: Progress
+      description: "Goals progress bars and workload capacity bars are inline divs. No shared Progress component with animation."
+
+    - name: Switch / Toggle
+      description: "Settings and automations use custom toggle implementations. No shared Switch component."
+
+    - name: Card
+      description: "Project cards, task cards, KPI cards all have similar but subtly different card patterns. No shared Card primitive."
+
+    - name: Table
+      description: "Issue list uses raw table markup. No shared Table component with sorting, selection, row actions."
+
+    - name: Pagination
+      description: "No pagination component. All lists render all items without page controls."
+
+    - name: DatePicker
+      description: "Calendar create-event-modal uses raw date inputs. No rich DatePicker component."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 7. BORDER RADIUS INCONSISTENCY AUDIT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+border_radius_audit:
+  rounded_sm_usage:
+    - "Sidebar nav items, header buttons, tooltip tags, modal header, form fields, automations inputs/cards, board toolbar, portfolio toolbar"
+  rounded_lg_usage:
+    - "Board columns, board task cards, file upload, error boundary retry button, docs sidebar search, calendar inputs, keyboard shortcuts dialog"
+  rounded_xl_usage:
+    - "Task detail sections, settings layout panels"
+  rounded_2xl_usage:
+    - "Auth shell, auth buttons, docs editor title/content areas"
+  rounded_full_usage:
+    - "Notification badge, avatars"
+  finding: "At least 5 different border-radius values used without a clear hierarchy. Sidebar and main shell use rounded-sm. Feature content varies between rounded-lg and rounded-xl for similar card patterns."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 8. TOP 15 IMPROVEMENTS (RANKED BY VISUAL IMPACT)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+top_improvements:
+  - rank: 1
+    title: "Add focus-visible ring to all interactive elements"
+    category: accessibility
+    impact: critical
+    effort: medium
+    description: "Add a Tailwind base layer rule: focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background-dark. Apply via @layer base to buttons, links, inputs."
+    files_affected: ["app/globals.css", "all button/link components"]
+
+  - rank: 2
+    title: "Create shared Button component with variants"
+    category: component-library
+    impact: high
+    effort: medium
+    description: "Extract the 100+ inline button patterns into a Button component with primary, secondary, ghost, danger, outline variants, sm/md/lg sizes, and loading/disabled states."
+    files_affected: ["components/ui/button.tsx", "all feature files"]
+
+  - rank: 3
+    title: "Add skeleton loading placeholders"
+    category: loading-states
+    impact: high
+    effort: medium
+    description: "Create a reusable Skeleton component (Skeleton.tsx) with animate-pulse. Apply to board cards, project grid, inbox list, calendar cells while initial data loads."
+    files_affected: ["components/ui/skeleton.tsx", "board-layout, projects-layout, inbox-layout, calendar-layout"]
+
+  - rank: 4
+    title: "Add list item stagger animations"
+    category: animation
+    impact: high
+    effort: low
+    description: "Wrap card/list items with motion.div using staggerChildren. Board cards, project cards, inbox items, goal rows should stagger-fade-in (opacity 0→1, y 8→0) with 30-50ms stagger."
+    files_affected: ["board-column, projects-grid, inbox-list, goals-surface"]
+
+  - rank: 5
+    title: "Expand design tokens in globals.css"
+    category: design-system
+    impact: high
+    effort: low
+    description: "Add to @theme: --radius-sm, --radius-md, --radius-lg, --color-success, --color-warning, --color-danger, --color-info, --color-surface-hover, --color-surface-raised, --spacing-section, --spacing-element."
+    files_affected: ["app/globals.css"]
+
+  - rank: 6
+    title: "Normalize border-radius to 3-tier system"
+    category: visual-consistency
+    impact: high
+    effort: medium
+    description: "Establish rounded-sm for inline elements/tags, rounded-md for cards/panels/inputs, rounded-lg for modals/overlays. Replace inconsistent rounded-xl, rounded-2xl in non-auth surfaces."
+    files_affected: ["20+ component files"]
+
+  - rank: 7
+    title: "Add ARIA labels to sidebar and all navigation"
+    category: accessibility
+    impact: critical
+    effort: low
+    description: "Add aria-label='Main navigation' to <nav>, aria-current='page' to active link, aria-label to mobile close button, role='dialog' + aria-modal to mobile sidebar."
+    files_affected: ["components/sidebar.tsx"]
+
+  - rank: 8
+    title: "Create route-level loading.tsx files"
+    category: loading-states
+    impact: high
+    effort: low
+    description: "Add loading.tsx with skeleton layouts to: app/board/, app/projects/, app/calendar/, app/inbox/, app/goals/, app/settings/, app/reports/. Use the new Skeleton component."
+    files_affected: ["app/*/loading.tsx (7 new files)"]
+
+  - rank: 9
+    title: "Add page transition animation"
+    category: animation
+    impact: high
+    effort: medium
+    description: "Wrap the main content area with a motion.div keyed by pathname. Use opacity + subtle y-offset transition (150ms) for route changes."
+    files_affected: ["app/page.tsx or layout wrapper"]
+
+  - rank: 10
+    title: "Make board responsive on mobile"
+    category: responsive
+    impact: high
+    effort: high
+    description: "On mobile (< md), switch board to a single-column stacked view with horizontal swipe between status columns, or a list view alternative. Add column selector tabs."
+    files_affected: ["components/board/board-surface.tsx, board-column.tsx"]
+
+  - rank: 11
+    title: "Create shared Avatar component"
+    category: component-library
+    impact: medium
+    effort: low
+    description: "Extract the repeated avatar pattern (image with fallback initials, border, sizes) into Avatar component with sm/md/lg sizes and optional online status indicator."
+    files_affected: ["components/ui/avatar.tsx", "header, task-card, inbox, activity-panel"]
+
+  - rank: 12
+    title: "Add Tooltip component to icon-only buttons"
+    category: accessibility
+    impact: medium
+    effort: medium
+    description: "Create a lightweight Tooltip component. Apply to all icon-only buttons that currently have no label: column action buttons, toolbar icons, detail panel actions."
+    files_affected: ["components/ui/tooltip.tsx", "board-column, task-detail, settings, docs"]
+
+  - rank: 13
+    title: "Add focus trap to Modal"
+    category: accessibility
+    impact: medium
+    effort: low
+    description: "Implement focus trap in modal.tsx using a focus-trap library or manual first/last focusable element cycling. Return focus to trigger on close."
+    files_affected: ["components/ui/modal.tsx"]
+
+  - rank: 14
+    title: "Unify hover/surface opacity tokens"
+    category: visual-consistency
+    impact: medium
+    effort: low
+    description: "Standardize surface hover to a single token (e.g., bg-white/[0.04]). Replace inconsistent bg-white/5, bg-white/[0.03], bg-white/[0.05], bg-white/[0.02] across all features."
+    files_affected: ["30+ component files"]
+
+  - rank: 15
+    title: "Add progress bar fill animation"
+    category: animation
+    impact: medium
+    effort: low
+    description: "Goals progress bars and workload capacity bars should animate from 0% to actual width on mount using motion.div with width transition."
+    files_affected: ["components/goals/goals-surface.tsx", "components/workload/workload-surface.tsx"]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FILES ANALYZED
+# ═══════════════════════════════════════════════════════════════════════════════
+
+files_analyzed:
+  - file: globals.css
+    path: app/globals.css
+    purpose: "Design system token definitions and global styles"
+    key_elements:
+      - element: "@theme block"
+        type: pattern
+        location: "app/globals.css:4-11"
+        description: "Only 4 color tokens + 2 font tokens defined"
+    language: css
+    lines: 30
+
+  - file: layout.tsx
+    path: app/layout.tsx
+    purpose: "Root HTML layout with font variables and body setup"
+    key_elements:
+      - element: "html lang='en'"
+        type: pattern
+        location: "app/layout.tsx:30"
+        description: "Correct lang attribute set. No skip-link present."
+    language: typescript
+    lines: 37
+
+  - file: providers.tsx
+    path: app/providers.tsx
+    purpose: "Client provider tree with QueryClient, auth, workspace, realtime, sidebar, inbox, toast, AI copilot"
+    key_elements:
+      - element: "Suspense fallback"
+        type: pattern
+        location: "app/providers.tsx:40"
+        description: "Single Suspense with blank dark div fallback — no loading skeleton"
+    language: typescript
+    lines: 62
+
+  - file: sidebar.tsx
+    path: components/sidebar.tsx
+    purpose: "Main navigation sidebar with desktop and mobile drawer variants"
+    key_elements:
+      - element: "SidebarContent"
+        type: function
+        location: "components/sidebar.tsx:51-145"
+        description: "Navigation items rendered without ARIA attributes"
+      - element: "Mobile drawer"
+        type: pattern
+        location: "components/sidebar.tsx:158-188"
+        description: "AnimatePresence spring animation, but no focus trap or dialog role"
+    language: typescript
+    lines: 190
+
+  - file: header.tsx
+    path: components/header.tsx
+    purpose: "Top header bar with search, notifications, AI copilot, profile"
+    key_elements:
+      - element: "aria-label on 3 buttons"
+        type: pattern
+        location: "components/header.tsx:106,147,155"
+        description: "Only 3 of ~8 interactive elements have aria-labels"
+    language: typescript
+    lines: 220
+
+  - file: board-layout.tsx
+    path: components/board/board-layout.tsx
+    purpose: "Board feature layout with filtering, bulk actions, DnD, create modal"
+    key_elements:
+      - element: "Loading/empty/error states"
+        type: pattern
+        location: "components/board/board-layout.tsx:320-340"
+        description: "Loading and empty handled via EmptyState. No error state."
+    language: typescript
+    lines: 400
+
+  - file: board-surface.tsx
+    path: components/board/board-surface.tsx
+    purpose: "DragDropContext wrapper rendering board columns"
+    key_elements:
+      - element: "Fixed 320px columns"
+        type: pattern
+        location: "components/board/board-surface.tsx:40"
+        description: "Horizontal scroll, no responsive adaptation"
+    language: typescript
+    lines: 90
+
+  - file: task-card.tsx
+    path: components/board/task-card.tsx
+    purpose: "Draggable task card in board column"
+    key_elements:
+      - element: "No keyboard/ARIA interaction"
+        type: pattern
+        location: "components/board/task-card.tsx:60-80"
+        description: "Click handler on div without role, tabIndex, or key handler"
+    language: typescript
+    lines: 140
+
+  - file: calendar-layout.tsx
+    path: components/calendar/calendar-layout.tsx
+    purpose: "Calendar feature layout with view modes, search, loading/error/empty states"
+    key_elements:
+      - element: "Complete state handling"
+        type: pattern
+        location: "components/calendar/calendar-layout.tsx:95-130"
+        description: "Good pattern: loading spinner, error banner, empty state — best UI state handling in the codebase"
+    language: typescript
+    lines: 160
+
+  - file: inbox-layout.tsx
+    path: components/inbox/inbox-layout.tsx
+    purpose: "Inbox master-detail layout with responsive mobile/desktop"
+    key_elements:
+      - element: "Responsive master-detail"
+        type: pattern
+        location: "components/inbox/inbox-layout.tsx:93-160"
+        description: "Good responsive pattern: side-by-side on md+, overlay on mobile"
+    language: typescript
+    lines: 165
+
+  - file: projects-layout.tsx
+    path: components/projects/projects-layout.tsx
+    purpose: "Projects listing with grid/list views and detail panel"
+    key_elements:
+      - element: "Missing loading state"
+        type: pattern
+        location: "components/projects/projects-layout.tsx:57-95"
+        description: "Has error and empty but no loading indicator"
+    language: typescript
+    lines: 100
+
+  - file: goals-surface.tsx
+    path: components/goals/goals-surface.tsx
+    purpose: "Hierarchical goal tree with expandable rows and progress bars"
+    key_elements:
+      - element: "Tree expansion without ARIA"
+        type: pattern
+        location: "components/goals/goals-surface.tsx:80"
+        description: "useState expandedRows without aria-expanded or role='tree'"
+    language: typescript
+    lines: 270
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PATTERNS FOUND
+# ═══════════════════════════════════════════════════════════════════════════════
+
+patterns_found:
+  - category: architecture
+    pattern: "Layout-Surface-Toolbar-Detail-Data module pattern"
+    description: "Every feature follows layout (state + orchestration) → surface (visual content) → toolbar (search/filter/view) → detail (side panel) → data (types + mocks) structure."
+    examples:
+      - file: components/board/
+        location: "board-layout.tsx, board-surface.tsx, board-toolbar.tsx, task-detail.tsx, data.ts"
+        snippet: "Consistent across all 15+ feature directories"
+    prevalence: common
+
+  - category: naming
+    pattern: "Feature-prefixed component naming"
+    description: "All components are named {feature}-{role}.tsx: board-layout, calendar-surface, goals-toolbar, inbox-detail"
+    examples:
+      - file: components/calendar/
+        location: "calendar-layout.tsx, calendar-surface.tsx, calendar-toolbar.tsx, calendar-detail.tsx"
+        snippet: "Consistent naming convention"
+    prevalence: common
+
+  - category: structure
+    pattern: "AnimatePresence for detail panels"
+    description: "Detail side panels uniformly use AnimatePresence wrapping a motion.div that slides from right (x: 100% → 0)"
+    examples:
+      - file: components/calendar/calendar-layout.tsx
+        location: "line 138-151"
+        snippet: "<AnimatePresence>{selectedItem && <div className='absolute top-0 right-0 bottom-0 z-20'><CalendarDetail ... /></div>}</AnimatePresence>"
+    prevalence: common
+
+  - category: error_handling
+    pattern: "Inconsistent error display"
+    description: "Error states use 3 different patterns: inline rose banner (projects, calendar), EmptyState with retry (inbox, workload), and no error handling at all (board, goals)"
+    examples:
+      - file: components/projects/projects-layout.tsx
+        location: "line 69"
+        snippet: "rounded-sm border border-rose-500/20 bg-rose-500/10 px-4 py-3"
+      - file: components/inbox/inbox-layout.tsx
+        location: "line 100"
+        snippet: "<EmptyState icon={TriangleAlert} title='Inbox unavailable' ... actionLabel='Retry' />"
+    prevalence: occasional
+
+  - category: structure
+    pattern: "Custom dropdown with click-outside"
+    description: "All dropdown menus are hand-rolled: useState boolean + useRef + mousedown listener for click-outside. No shared primitive."
+    examples:
+      - file: components/board/task-detail.tsx
+        location: "line 372-386"
+        snippet: "const [dropdownOpen, setDropdownOpen] = useState(false); const dropdownRef = useRef(...); useEffect clicking outside"
+      - file: components/docs/docs-editor.tsx
+        location: "line 619-746"
+        snippet: "const [showFolderDropdown, setShowFolderDropdown] = useState(false); const folderDropdownRef = useRef(...)"
+    prevalence: common
+
+  - category: naming
+    pattern: "Inconsistent focus style pattern"
+    description: "Input focus uses multiple variations: focus:outline-none focus:border-primary, focus:border-primary/50, focus:ring-1 focus:ring-primary/40, focus:bg-white/[0.05]"
+    examples:
+      - file: components/workload/workload-toolbar.tsx
+        location: "line 83"
+        snippet: "focus:border-primary/40 focus:outline-none"
+      - file: components/docs/docs-sidebar.tsx
+        location: "line 245"
+        snippet: "focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/50"
+    prevalence: common
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OPEN QUESTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+open_questions:
+  - question: "Should the project adopt a component library framework (e.g., Radix UI primitives) for accessible building blocks (Dialog, Popover, Tabs, Tooltip), or continue building custom?"
+    context: "Current approach of hand-rolling every dropdown, modal focus trap, and tooltip is error-prone for accessibility. Radix + Tailwind is a common pattern."
+    type: decision_blocker
+    affects: ["button-component", "tooltip-component", "dropdown-component", "modal-focus-trap"]
+
+  - question: "What is the target WCAG conformance level — A, AA, or AAA?"
+    context: "Current codebase has Level A violations (keyboard access, focus visible, ARIA roles). The scope of accessibility remediation depends on target level."
+    type: decision_blocker
+    affects: ["all-accessibility-items"]
+
+  - question: "Should mobile views for board/calendar/timeline be simplified views (list/agenda) or attempt to replicate desktop layouts responsively?"
+    context: "Board kanban, calendar grid, and timeline gantt charts are inherently wide. Two approaches: responsive scaling vs. alternate mobile UX."
+    type: research
+    affects: ["board-responsive", "calendar-responsive", "timeline-responsive"]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GAPS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+gaps:
+  - area: "Sprints, Templates, Time-tracking, Intake surfaces"
+    description: "These feature surfaces were not deeply examined in this research pass. They likely share the same patterns and gaps but were not individually verified."
+    impact: research_blocker
+    affects: ["comprehensive-coverage"]
+
+  - area: "Color contrast ratios"
+    description: "Did not perform automated contrast ratio testing. Text colors like text-slate-500 on bg-background-dark (#0a0a0a) and text-slate-600 on neutral surfaces (#111111) are likely below 4.5:1 AA ratio."
+    impact: research_blocker
+    affects: ["accessibility-contrast"]
+
+  - area: "Touch target sizes"
+    description: "Did not audit minimum touch target sizes (48x48px per WCAG 2.5.8). Many icon-only buttons appear to be 32px or smaller."
+    impact: nice_to_know
+    affects: ["mobile-usability"]

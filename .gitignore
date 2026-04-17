@@ -1,8 +1,33 @@
+# Node / Next.js
 node_modules/
 .next/
+out/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
 nul
+
+# Playwright / tests
+playwright-report/
+test-results/
+tests/output/
+
+# Workspace scratch
+scratch/
+output/
+
+# .NET
+backend/**/bin/
+backend/**/obj/
+*.user
+*.suo
+
+# Dev logs
+*.pid

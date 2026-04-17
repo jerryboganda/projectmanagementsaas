@@ -8,11 +8,13 @@ import { WorkspaceProvider } from "@/contexts/workspace-context";
 import { RealtimeProvider } from "@/contexts/realtime-context";
 import { AppShellGuard } from "@/components/auth/app-shell-guard";
 import { CommandPaletteProvider } from "@/components/command-palette-provider";
+import { AnnouncerProvider } from '@/components/ui/announcer';
 import { ToastProvider } from "@/components/ui/toast";
 import { KeyboardShortcutsDialog } from "@/components/ui/keyboard-shortcuts-dialog";
 import { GlobalShortcuts } from "@/components/global-shortcuts";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { AiCopilotProvider } from "@/components/ai-copilot-provider";
+import { MotionProvider } from "@/lib/motion";
 import { Suspense, useState } from "react";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -34,22 +36,35 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SidebarProvider>
+      <MotionProvider>
+        <SidebarProvider>
         <AuthProvider>
           <WorkspaceProvider>
-            <Suspense fallback={<div className="flex-1 min-h-screen bg-background-dark" />}>
+            <Suspense fallback={
+              <div className="flex-1 min-h-screen bg-background-dark flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="relative">
+                    <div className="size-12 rounded-full border-2 border-neutral-border" />
+                    <div className="absolute inset-0 size-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  </div>
+                  <p className="text-sm text-slate-500 font-mono tracking-wider">Loading workspace...</p>
+                </div>
+              </div>
+            }>
               <AppShellGuard>
                 <RealtimeProvider>
                   <InboxProvider>
                     <ToastProvider>
-                      <AiCopilotProvider>
-                        <CommandPaletteProvider>
-                          <GlobalShortcuts />
-                          <KeyboardShortcutsDialog />
-                          <OnboardingWizard />
-                          {children}
-                        </CommandPaletteProvider>
-                      </AiCopilotProvider>
+                      <AnnouncerProvider>
+                        <AiCopilotProvider>
+                          <CommandPaletteProvider>
+                            <GlobalShortcuts />
+                            <KeyboardShortcutsDialog />
+                            <OnboardingWizard />
+                            {children}
+                          </CommandPaletteProvider>
+                        </AiCopilotProvider>
+                      </AnnouncerProvider>
                     </ToastProvider>
                   </InboxProvider>
                 </RealtimeProvider>
@@ -58,6 +73,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           </WorkspaceProvider>
         </AuthProvider>
       </SidebarProvider>
+      </MotionProvider>
     </QueryClientProvider>
   );
 }

@@ -36,7 +36,7 @@ export function ProjectsToolbar({
           />
         </div>
         
-        <div className="h-4 w-px bg-neutral-border hidden sm:block"></div>
+        <div className="h-4 w-px bg-neutral-border hidden sm:block" />
         
         <div className="hidden sm:flex items-center gap-2">
           <select 

@@ -10,7 +10,7 @@ export default function GoalsPage() {
   return (
     <>
       <Sidebar />
-      <main className="flex-1 flex flex-col overflow-hidden bg-background-dark relative">
+      <main id="main-content" className="flex-1 flex flex-col overflow-hidden bg-background-dark relative">
         <Header title="Goals" subtitle="Strategic Execution & OKRs" />
         <Breadcrumbs />
         <div className="flex-1 flex flex-col h-full overflow-hidden">

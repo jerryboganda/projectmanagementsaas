@@ -166,7 +166,9 @@ public static class BillingModule
 | `POST` | `/api/v1/billing/portal` | WorkspaceOwner | global | Create customer portal session |
 | `GET` | `/api/v1/billing/invoices` | WorkspaceOwner | global | List invoices |
 | `GET` | `/api/v1/billing/usage` | WorkspaceMember | global | Current usage metrics |
-| `POST` | `/api/v1/billing/webhooks` | Anonymous | webhook | Stripe webhook handler |
+| `POST` | `/api/v1/billing/webhook` | Anonymous | webhook | Stripe webhook handler |
+
+> The current backend also exposes subscription CRUD, usage summary, and public plan lookup routes.
 
 ### 4.2 Checkout Flow
 
@@ -192,7 +194,7 @@ public static class BillingEndpoints
         group.MapGet("/usage", GetUsage);
 
         // Webhook — no auth (verified via Stripe signature)
-        app.MapPost("/api/v1/billing/webhooks", HandleWebhook)
+        app.MapPost("/api/v1/billing/webhook", HandleWebhook)
             .AllowAnonymous()
             .RequireRateLimiting("webhook");
     }
@@ -1332,7 +1334,7 @@ STRIPE_PUBLISHABLE_KEY=pk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_test_...
 
 # Forward webhooks locally
-stripe listen --forward-to https://localhost:5001/api/v1/billing/webhooks
+stripe listen --forward-to https://localhost:5001/api/v1/billing/webhook
 ```
 
 ---
@@ -1344,7 +1346,7 @@ stripe listen --forward-to https://localhost:5001/api/v1/billing/webhooks
 | **19** | Install `Stripe.net`, configure settings, create Stripe Products/Prices | Stripe SDK integrated |
 | | `POST /api/v1/billing/checkout` — Checkout Session flow | Checkout works in test mode |
 | | `POST /api/v1/billing/portal` — Customer Portal session | Portal redirect works |
-| | `POST /api/v1/billing/webhooks` — webhook handler with signature verification | Events received and processed |
+| | `POST /api/v1/billing/webhook` — webhook handler with signature verification | Events received and processed |
 | | `GET /api/v1/billing/subscription` — current subscription info | Subscription query works |
 | | Seed `plans` table with 4 tiers | Plan data available |
 | **20** | `EntitlementService` — plan limits, feature checks, caching | Entitlement checks functional |

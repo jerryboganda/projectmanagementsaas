@@ -1,8 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { HubConnection } from "@microsoft/signalr";
-import { HubConnectionState } from "@microsoft/signalr";
+import { HubConnectionState, type HubConnection } from "@microsoft/signalr";
 import { useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { useRealtime } from "@/contexts/realtime-context";

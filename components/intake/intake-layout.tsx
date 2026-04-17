@@ -615,7 +615,7 @@ export function IntakeLayout() {
         <div className="rounded-sm border border-red-500/20 bg-red-500/10 p-6 text-center max-w-md">
           <AlertTriangle className="size-8 text-red-300 mx-auto mb-3" />
           <h2 className="text-[16px] font-semibold text-slate-100 mb-2">Intake Unavailable</h2>
-          <p className="text-[13px] text-slate-300">{error instanceof Error ? error.message : "The intake surface could not load."}</p>
+          <p className="text-[13px] text-slate-300">{(error as unknown) instanceof Error ? (error as Error).message : "The intake surface could not load."}</p>
         </div>
       </div>
     );

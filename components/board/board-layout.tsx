@@ -142,7 +142,7 @@ export function BoardLayout() {
   );
 
   const filteredData = useMemo(() => {
-    let filteredTasks = { ...boardData.tasks };
+    const filteredTasks = { ...boardData.tasks };
 
     Object.values(filteredTasks).forEach((task) => {
       let matches = true;

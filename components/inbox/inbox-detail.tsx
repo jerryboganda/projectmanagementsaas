@@ -60,7 +60,7 @@ export function InboxDetail({ item, onClose, onMarkAsRead, onArchive, onSave, on
           <button className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-white/5 rounded-sm transition-colors">
             <MoreHorizontal className="size-4" />
           </button>
-          <div className="w-px h-4 bg-neutral-border mx-1"></div>
+          <div className="w-px h-4 bg-neutral-border mx-1" />
           <button onClick={onClose} className="hidden md:flex p-1.5 text-slate-400 hover:text-slate-200 hover:bg-white/5 rounded-sm transition-colors">
             <X className="size-4" />
           </button>

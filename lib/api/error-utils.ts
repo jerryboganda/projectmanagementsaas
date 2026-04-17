@@ -56,8 +56,21 @@ export function getApiErrorMessage(error: unknown, fallback: string) {
     }
   }
 
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
+  if (error instanceof Error) {
+    // Map AbortError / TimeoutError to a friendly networking message so the
+    // user sees actionable feedback instead of a generic "aborted" string
+    // when the backend is unreachable.
+    const name = error.name ?? "";
+    if (name === "TimeoutError" || name === "AbortError") {
+      return "The server didn't respond in time. Check your connection and try again.";
+    }
+    // Native fetch network failures surface as TypeError: "Failed to fetch"
+    if (name === "TypeError" && /fetch|network/i.test(error.message)) {
+      return "We couldn't reach the server. Please verify your connection and try again.";
+    }
+    if (error.message.trim()) {
+      return error.message;
+    }
   }
 
   return fallback;

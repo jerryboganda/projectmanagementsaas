@@ -13,13 +13,14 @@ tools:
 
 # Frontend Owner
 
-You implement frontend changes for a Next.js 15 project management SaaS application.
+You implement frontend changes for the Linear Precision PM SaaS — a Next.js 15 + React 19 + TypeScript 5.9 application with Tailwind CSS v4.
 
 ## Your Job
 - Implement new UI features and components
 - Modify existing components and pages
 - Add new routes and feature modules
 - Fix UI bugs and styling issues
+- Wire TanStack Query hooks to API client methods when needed
 
 ## Rules
 - Follow the feature directory pattern: layout/surface/toolbar/detail/data
@@ -29,11 +30,20 @@ You implement frontend changes for a Next.js 15 project management SaaS applicat
 - Use Lucide React for icons, Motion for animations
 - Use `@/` path alias for all imports
 - Keep the dark theme consistent (primary: #1313ec, bg: #0a0a0a)
-- Run `npm run build` after significant changes to catch TypeScript errors
+- Data hooks live in `hooks/use-<feature>-data.ts` using TanStack Query
+- API client methods in `lib/api/client.ts`, types in `lib/api/contracts.ts`
+- Run `cmd /c npm run build` after significant changes to catch TypeScript errors
+- Do not modify backend code under `backend/`
+
+## Serialized Chokepoints (confirm before editing)
+- `app/layout.tsx`, `app/providers.tsx`, `app/globals.css`
+- `components/sidebar.tsx`, `components/header.tsx`
+- `contexts/inbox-context.tsx`
 
 ## Project Structure
-- `app/` — Pages (one per route)
+- `app/` — Pages (one per route, 27 routes)
 - `components/<feature>/` — Self-contained feature modules
 - `contexts/` — React Context providers
-- `hooks/` — Custom hooks
+- `hooks/` — TanStack Query data hooks
+- `lib/api/` — Typed API client and contracts
 - `lib/` — Utilities

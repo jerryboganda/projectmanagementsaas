@@ -48,7 +48,7 @@ export default function Dashboard() {
   return (
     <>
       <Sidebar />
-      <main className="flex-1 flex flex-col overflow-hidden bg-background-dark relative">
+      <main id="main-content" className="flex-1 flex flex-col overflow-hidden bg-background-dark relative">
         <Header title="Dashboard" subtitle="Overview" onNewItem={() => setActiveModal("new-task")} />
         <Breadcrumbs />
 

@@ -28,8 +28,7 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useTimeTrackingData } from "@/hooks/use-time-tracking-data";
-import type { TimeTrackingEntry } from "@/hooks/use-time-tracking-data";
+import { useTimeTrackingData, type TimeTrackingEntry } from "@/hooks/use-time-tracking-data";
 
 // ============================================================
 // TYPES
@@ -1474,6 +1473,7 @@ function InlineEntryRow({
         <button
           onClick={async (e) => {
             e.stopPropagation();
+            // eslint-disable-next-line no-alert
             if (!window.confirm("Delete this time entry?")) return;
             await onDelete();
           }}

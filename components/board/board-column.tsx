@@ -42,34 +42,34 @@ export function BoardColumn({
   selectedTaskIds,
   onToggleSelect,
 }: Props) {
+
   return (
     <div className="flex flex-col w-[320px] shrink-0 bg-neutral-surface/30 border border-neutral-border rounded-lg overflow-hidden h-full">
       {/* Column Header */}
-      <div 
+      <div
         className={`flex items-center justify-between p-3 border-b border-neutral-border bg-neutral-surface/50 ${isDragDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
         {...(isDragDisabled ? {} : dragHandleProps)}
       >
-        <div className="flex items-center gap-2">
-          <h3 className="text-[13px] font-semibold text-slate-200">{column.title}</h3>
-          <span className="text-[11px] font-mono text-slate-500 bg-white/[0.05] px-1.5 py-0.5 rounded-sm border border-white/[0.05]">
-            {tasks.length}
-          </span>
-        </div>
+        <span className="text-[11px] font-mono text-slate-500 bg-white/[0.05] px-1.5 py-0.5 rounded-sm border border-white/[0.05]">
+          {tasks.length}
+        </span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => onCreateTask(COLUMN_ID_TO_STATUS[column.id] || "To Do")}
             className="p-1 text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] rounded-sm transition-colors"
+            aria-label={`Add task to ${column.title}`}
           >
             <Plus className="size-3.5" />
           </button>
-          <button className="p-1 text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] rounded-sm transition-colors">
+          <button
+            className="p-1 text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] rounded-sm transition-colors"
+            aria-label={`Column options for ${column.title}`}
+          >
             <MoreHorizontal className="size-3.5" />
           </button>
         </div>
       </div>
-
-      {/* Droppable Area */}
-      <Droppable droppableId={column.id} isDropDisabled={isDragDisabled}>
+      <Droppable droppableId={column.id}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}
@@ -95,7 +95,6 @@ export function BoardColumn({
               ))}
               {provided.placeholder}
             </div>
-            
             {/* Empty State */}
             {tasks.length === 0 && !snapshot.isDraggingOver && (
               <div className="h-full flex items-center justify-center text-slate-500 text-[12px] border-2 border-dashed border-neutral-border rounded-lg m-2 p-4 text-center">
@@ -105,7 +104,6 @@ export function BoardColumn({
           </div>
         )}
       </Droppable>
-
       <button
         onClick={() => onCreateTask(COLUMN_ID_TO_STATUS[column.id] || "To Do")}
         className="flex items-center gap-1.5 p-2.5 text-slate-500 hover:text-slate-300 hover:bg-white/[0.03] border-t border-neutral-border transition-colors"

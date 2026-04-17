@@ -587,7 +587,7 @@ public class GlobalExceptionMiddleware : IMiddleware
 
 ### 5.1 Identity Module
 
-**Responsibility:** User registration, authentication, sessions, OAuth, password management, 2FA.
+**Responsibility:** User registration, authentication, sessions, password recovery, OAuth, profile management, 2FA.
 
 **Entities:** `User` (extends IdentityUser), `RefreshToken` (Redis)
 
@@ -598,10 +598,15 @@ public class GlobalExceptionMiddleware : IMiddleware
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/forgot-password`
+- `POST /api/v1/auth/reset-password`
 - `POST /api/v1/auth/magic-link`
 - `GET /api/v1/auth/oauth/{provider}`
 - `GET /api/v1/users/me`
 - `PUT /api/v1/users/me`
+- `PUT /api/v1/users/me/password`
+- `GET /api/v1/users/me/workspaces`
+- `PUT /api/v1/users/me/active-workspace`
 
 ### 5.2 Workspace Module
 
@@ -752,6 +757,7 @@ public class GlobalExceptionMiddleware : IMiddleware
 **Key endpoints:**
 - `GET /api/v1/notifications`
 - `PUT /api/v1/notifications/{id}/read`
+- `PUT /api/v1/notifications/{id}/archive`
 - `PUT /api/v1/notifications/read-all`
 - `GET /api/v1/notifications/preferences`
 - `PUT /api/v1/notifications/preferences`
@@ -769,7 +775,7 @@ public class GlobalExceptionMiddleware : IMiddleware
 
 ### 5.14 Billing Module
 
-**Responsibility:** Subscription management, plan enforcement, usage tracking, Stripe integration.
+**Responsibility:** Subscription management, plan enforcement, usage tracking, plan catalog, Stripe integration.
 
 **Entities:** `Subscription`, `Plan`, `UsageRecord`
 
@@ -777,10 +783,16 @@ public class GlobalExceptionMiddleware : IMiddleware
 
 **Key endpoints:**
 - `GET /api/v1/billing/subscription`
+- `POST /api/v1/billing/subscription`
+- `PUT /api/v1/billing/subscription`
+- `DELETE /api/v1/billing/subscription`
 - `POST /api/v1/billing/checkout`
 - `POST /api/v1/billing/portal`
 - `POST /api/v1/billing/webhook` (Stripe)
 - `GET /api/v1/billing/usage`
+- `GET /api/v1/billing/usage/summary`
+- `GET /api/v1/plans`
+- `GET /api/v1/plans/{id}`
 
 ### 5.15 AI Module
 
@@ -794,6 +806,7 @@ public class GlobalExceptionMiddleware : IMiddleware
 - `POST /api/v1/ai/conversations`
 - `POST /api/v1/ai/conversations/{id}/messages`
 - `GET /api/v1/ai/conversations`
+- `DELETE /api/v1/ai/conversations/{id}`
 
 ### 5.16 Analytics Module
 
@@ -824,16 +837,20 @@ public class GlobalExceptionMiddleware : IMiddleware
 
 ### 5.18 Admin Module
 
-**Responsibility:** Workspace administration, audit log, feature flags.
+**Responsibility:** Workspace administration, audit events, feature flags.
 
 **Entities:** `AuditEvent`, `FeatureFlag`
 
 **Dependencies:** Workspace, Identity
 
 **Key endpoints:**
-- `GET /api/v1/admin/audit-log`
+- `GET /api/v1/admin/audit-events`
+- `GET /api/v1/admin/audit-events/{id}`
 - `GET /api/v1/admin/feature-flags`
-- `PUT /api/v1/admin/feature-flags/{key}`
+- `POST /api/v1/admin/feature-flags`
+- `PUT /api/v1/admin/feature-flags/{id}`
+- `DELETE /api/v1/admin/feature-flags/{id}`
+- `GET /api/v1/admin/workspace-stats`
 
 ---
 

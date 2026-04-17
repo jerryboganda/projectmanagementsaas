@@ -103,7 +103,7 @@ export function TimelineSurface({
       isWeekend: boolean;
       daysInMonth?: number;
     }[] = [];
-    let currentDate = new Date(startDate);
+    const currentDate = new Date(startDate);
 
     if (zoomLevel === "days") {
       for (let i = 0; i < totalDays; i++) {

@@ -10,7 +10,7 @@ export default function SettingsPage() {
   return (
     <>
       <Sidebar />
-      <main className="flex-1 flex flex-col overflow-hidden bg-background-dark relative min-w-0">
+      <main id="main-content" className="flex-1 flex flex-col overflow-hidden bg-background-dark relative min-w-0">
         <Header title="Settings" />
         <Breadcrumbs />
         <div className="flex-1 flex overflow-hidden relative">

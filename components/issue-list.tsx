@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { AlertCircle, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { DashboardTaskItem } from "@/lib/dashboard/types";
+import { distance, stagger, transitions } from "@/lib/motion";
 
 const fallbackIssues: DashboardTaskItem[] = [
   { id: "LP-101", title: "Refactor auth middleware for Edge Runtime", priority: "Urgent", status: "in-progress", dueLabel: "Today", dueTone: "danger", project: "Workspace" },
@@ -105,9 +106,9 @@ export function IssueList({ issues, isLoading = false }: IssueListProps) {
             ) : items.map((issue, i) => (
               <motion.tr
                 key={issue.id}
-                initial={{ opacity: 0, x: -10 }}
+                initial={{ opacity: 0, x: -distance.md }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, delay: 0.3 + i * 0.05 }}
+                transition={{ ...transitions.base, delay: 0.1 + i * stagger.base }}
                 className="h-10 hover:bg-white/[0.04] group cursor-pointer transition-colors"
               >
                 <td className="px-4 text-[12px] font-mono text-slate-500 group-hover:text-slate-400 transition-colors">{issue.id}</td>

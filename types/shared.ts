@@ -82,3 +82,107 @@ export interface Milestone {
   dueDate: string;
   completed: boolean;
 }
+
+// === Pagination ===
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+export interface PaginationParams {
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+// === Filtering ===
+
+export interface FilterOption {
+  label: string;
+  value: string;
+  count?: number;
+}
+
+export interface FilterState {
+  search: string;
+  status: string[];
+  priority: string[];
+  assignee: string[];
+  dateRange?: { start: string; end: string };
+  tags: string[];
+}
+
+// === API Response Wrappers ===
+
+export interface ApiSuccessResponse<T> {
+  data: T;
+  message?: string;
+}
+
+export interface ApiErrorResponse {
+  error: string;
+  message: string;
+  statusCode: number;
+  details?: Record<string, string[]>;
+}
+
+// === Notification Types ===
+
+export type NotificationType = 
+  | 'task_assigned'
+  | 'task_completed'
+  | 'comment_added'
+  | 'mention'
+  | 'due_date_approaching'
+  | 'status_changed'
+  | 'project_update'
+  | 'sprint_started'
+  | 'sprint_completed';
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+  actor?: User;
+  actionUrl?: string;
+}
+
+// === Role & Permissions ===
+
+export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer' | 'guest';
+
+export interface Permission {
+  resource: string;
+  actions: ('create' | 'read' | 'update' | 'delete')[];
+}
+
+// === Workspace ===
+
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  slug: string;
+  memberCount: number;
+  projectCount: number;
+  plan: 'free' | 'pro' | 'enterprise';
+}
+
+// === Date Ranges ===
+
+export type DatePreset = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_quarter' | 'custom';
+
+export interface DateRange {
+  start: string;
+  end: string;
+  preset?: DatePreset;
+}

@@ -48,7 +48,7 @@ export function BoardToolbar({
           />
         </div>
 
-        <div className="h-4 w-px bg-neutral-border"></div>
+        <div className="h-4 w-px bg-neutral-border" />
 
         <div className="flex items-center gap-2">
           <div className="relative flex items-center">
@@ -56,6 +56,7 @@ export function BoardToolbar({
             <select 
               value={assigneeFilter}
               onChange={(e) => onAssigneeFilterChange(e.target.value)}
+              aria-label="Filter by assignee"
               className="appearance-none bg-white/[0.02] border border-neutral-border pl-8 pr-8 py-1.5 text-[13px] text-slate-300 focus:outline-none focus:border-primary/50 rounded-sm transition-colors cursor-pointer"
             >
               <option value="All" className="bg-background-dark">All Assignees</option>
@@ -70,6 +71,7 @@ export function BoardToolbar({
             <select 
               value={priorityFilter}
               onChange={(e) => onPriorityFilterChange(e.target.value)}
+              aria-label="Filter by priority"
               className="appearance-none bg-white/[0.02] border border-neutral-border pl-8 pr-8 py-1.5 text-[13px] text-slate-300 focus:outline-none focus:border-primary/50 rounded-sm transition-colors cursor-pointer"
             >
               <option value="All" className="bg-background-dark">All Priorities</option>
@@ -81,13 +83,14 @@ export function BoardToolbar({
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-slate-500 pointer-events-none" />
           </div>
 
-          <div className="h-4 w-px bg-neutral-border mx-1"></div>
+          <div className="h-4 w-px bg-neutral-border mx-1" />
           
           <div className="relative flex items-center gap-2">
             <ListFilter className="size-3.5 text-slate-500" />
             <select 
               value={groupBy}
               onChange={(e) => onGroupByChange(e.target.value)}
+              aria-label="Group tasks by"
               className="appearance-none bg-transparent border-none pl-1 pr-6 py-1.5 text-[13px] text-slate-300 focus:outline-none focus:text-slate-200 rounded-sm transition-colors cursor-pointer font-medium"
             >
               <option value="None" className="bg-background-dark">No Grouping</option>
@@ -100,7 +103,9 @@ export function BoardToolbar({
 
           {hasFilters && (
             <button 
+              type="button"
               onClick={handleClearFilters}
+              aria-label="Clear all filters"
               className="text-[12px] text-slate-400 hover:text-slate-200 px-2 transition-colors ml-2"
             >
               Clear
@@ -110,20 +115,22 @@ export function BoardToolbar({
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] rounded-sm transition-colors">
-          <Settings className="size-4" />
+        <button type="button" aria-label="Board settings" className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] rounded-sm transition-colors">
+          <Settings className="size-4" aria-hidden="true" />
         </button>
 
-        <div className="h-4 w-px bg-neutral-border mx-1"></div>
+        <div className="h-4 w-px bg-neutral-border mx-1" />
 
         <span className="text-[12px] text-slate-500 font-mono">
           {taskCount} {taskCount === 1 ? 'task' : 'tasks'}
         </span>
         <button
+          type="button"
           onClick={onNewTask}
+          aria-label="Create new task"
           className="h-8 px-3 border border-primary bg-primary hover:bg-primary/90 text-white flex items-center gap-1.5 rounded-sm transition-colors"
         >
-          <Plus className="size-[16px]" />
+          <Plus className="size-[16px]" aria-hidden="true" />
           <span className="text-[12px] font-medium">New Task</span>
         </button>
       </div>

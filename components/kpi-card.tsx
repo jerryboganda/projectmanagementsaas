@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { TrendingUp, TrendingDown, Minus, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { distance, duration, easing } from "@/lib/motion";
 
 interface KpiCardProps {
   title: string;
@@ -21,9 +22,9 @@ export function KpiCard({ title, value, trend, trendUp, neutral, delay = 0, icon
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: distance.md }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay, ease: "easeOut" }}
+      transition={{ duration: duration.slow, delay, ease: easing.standard }}
       className="p-4 border border-neutral-border bg-neutral-surface flex flex-col gap-1.5 rounded-sm hover:border-slate-700 transition-colors cursor-default group"
     >
       <div className="flex items-center justify-between">

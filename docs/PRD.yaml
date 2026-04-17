@@ -1,0 +1,123 @@
+prd_id: "ENHANCE-001"
+version: "1.0.0"
+
+title: "Deep Project Enhancement — Full Agent Fleet"
+description: >
+  Comprehensive deep overhaul of the Linear Precision PM SaaS codebase
+  leveraging all available agents across 7 enhancement domains:
+  code quality, security hardening, UI/UX polish, frontend testing,
+  backend integration, documentation, and performance optimization.
+
+user_stories:
+  - as_a: "developer"
+    i_want: "clean, well-organized code with no dead code or duplication"
+    so_that: "the codebase is maintainable and easy to navigate"
+  - as_a: "security engineer"
+    i_want: "OWASP-compliant security posture with proper headers, rate limiting, and no hardcoded secrets"
+    so_that: "the application is production-ready and secure"
+  - as_a: "user"
+    i_want: "accessible, responsive UI with proper loading states and keyboard navigation"
+    so_that: "I can use the app effectively on any device and with assistive technology"
+  - as_a: "developer"
+    i_want: "frontend unit tests covering critical hooks and components"
+    so_that: "regressions are caught before deployment"
+  - as_a: "user"
+    i_want: "real-time updates and fast page loads"
+    so_that: "the app feels responsive and collaborative"
+  - as_a: "new team member"
+    i_want: "accurate, up-to-date documentation"
+    so_that: "I can onboard quickly and understand the architecture"
+
+scope:
+  in_scope:
+    - "Remove dead code (app-data-context.tsx, types/shared.ts unused exports)"
+    - "Extract monolithic layout components into layout/surface/toolbar/detail pattern"
+    - "Consolidate duplicated types (User, Status, Priority) into shared source"
+    - "Enhance ESLint config with import ordering, unused detection rules"
+    - "Add security headers (CSP, HSTS, X-Frame-Options) to Next.js and ASP.NET"
+    - "Apply rate limiters to auth and API endpoints"
+    - "Move hardcoded secrets to environment variables"
+    - "Fix 7 medium OWASP issues (cookie flags, CSRF, CORS, user enumeration, etc.)"
+    - "Add Next.js middleware.ts for server-side auth guards"
+    - "Add ARIA attributes, focus management, skip-link across key components"
+    - "Add responsive breakpoints to board, calendar, timeline, docs, goals"
+    - "Create skeleton loading components and route-level loading.tsx files"
+    - "Build missing UI primitives (Button, Input, Avatar, Tooltip, Skeleton, Dropdown, Progress)"
+    - "Add dynamic imports for Recharts, DnD, markdown, and heavy components"
+    - "Remove dead app-data-context from provider stack and module graph"
+    - "Extend SignalR subscriptions beyond board to inbox, sprints, timeline"
+    - "Migrate intake from mock data to real API"
+    - "Add TanStack Query prefetching and optimistic updates"
+    - "Update architecture docs, feature matrix, and integration status"
+  out_of_scope:
+    - "Git repository initialization (requires user action)"
+    - "CI/CD pipeline creation"
+    - "New feature development (only enhancing existing features)"
+    - "Mobile app work"
+    - "Database schema changes"
+    - "Production deployment"
+    - "Third-party integrations (Slack, GitHub, etc.)"
+
+acceptance_criteria:
+  - criterion: "Zero dead code files remain"
+    verification: "grep for removed imports, build succeeds"
+  - criterion: "No component file exceeds 400 lines"
+    verification: "Line count check on all .tsx files"
+  - criterion: "All security headers present in responses"
+    verification: "curl -I check on dev server"
+  - criterion: "Rate limiters applied to auth endpoints"
+    verification: "Backend test coverage"
+  - criterion: "No hardcoded secrets in source"
+    verification: "grep for passwords/keys in appsettings"
+  - criterion: "WCAG 2.1 AA keyboard navigation on sidebar, header, board"
+    verification: "Tab through flows, verify focus ring visibility"
+  - criterion: "Board and calendar render usably at 768px width"
+    verification: "Browser resize test"
+  - criterion: "Loading skeletons visible on 5+ routes"
+    verification: "Visual verification during data fetch"
+  - criterion: "Heavy libraries loaded via dynamic import"
+    verification: "Bundle analysis shows separate chunks"
+  - criterion: "Frontend lint, typecheck, build all pass"
+    verification: "npm run lint; npm run typecheck; npm run build"
+  - criterion: "Backend 78/78 tests still pass"
+    verification: "dotnet test LinearPrecision.sln"
+
+needs_clarification: []
+
+features:
+  - name: "Code Quality Overhaul"
+    overview: "Dead code removal, component extraction, type consolidation, ESLint enhancement"
+    status: planned
+  - name: "Security Hardening"
+    overview: "OWASP Top 10 remediation, security headers, rate limiting, secret management"
+    status: planned
+  - name: "UI/UX Polish"
+    overview: "Accessibility, responsive design, loading states, animation improvements"
+    status: planned
+  - name: "Performance Optimization"
+    overview: "Code splitting, bundle optimization, provider cleanup, prefetching"
+    status: planned
+  - name: "Backend Integration"
+    overview: "Intake mock migration, SignalR expansion, optimistic updates"
+    status: planned
+  - name: "Documentation Update"
+    overview: "Architecture docs sync, feature matrix update, integration status refresh"
+    status: planned
+
+decisions:
+  - id: "ADR-001"
+    status: accepted
+    decision: "Maximum depth enhancement with plan-first approval"
+    rationale: "User explicitly requested deep overhaul across all domains"
+    alternatives: ["Quick wins only", "Moderate depth"]
+    consequences: ["5+ execution waves required", "Comprehensive test validation needed after each wave"]
+  - id: "ADR-002"
+    status: accepted
+    decision: "Prioritize security and code quality before UI/UX and performance"
+    rationale: "Security issues are production blockers; clean code enables faster UI/perf work"
+    alternatives: ["UI-first approach", "Performance-first approach"]
+    consequences: ["Early waves focus on non-visual changes", "Visual improvements come in later waves"]
+
+changes:
+  - version: "1.0.0"
+    change: "Initial PRD created from deep research across 4 domains"

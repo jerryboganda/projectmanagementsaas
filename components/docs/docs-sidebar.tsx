@@ -1,7 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Archive,
@@ -19,8 +18,7 @@ import {
   Terminal,
 } from "lucide-react";
 import type { DocumentResponse } from "@/lib/api/contracts";
-import type { DocFolder } from "@/hooks/use-documents-data";
-import { FOLDER_OPTIONS } from "@/hooks/use-documents-data";
+import { FOLDER_OPTIONS, type DocFolder } from "@/hooks/use-documents-data";
 import {
   formatDocumentTimestamp,
   getDocumentPreview,

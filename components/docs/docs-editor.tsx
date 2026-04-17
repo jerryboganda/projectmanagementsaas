@@ -7,8 +7,7 @@ import {
   type DocumentResponse,
   type UpdateDocumentRequest,
 } from "@/lib/api/contracts";
-import type { DocFolder, DocRevision } from "@/hooks/use-documents-data";
-import { FOLDER_OPTIONS } from "@/hooks/use-documents-data";
+import { FOLDER_OPTIONS, type DocFolder, type DocRevision } from "@/hooks/use-documents-data";
 import {
   Bold,
   Check,
@@ -682,6 +681,7 @@ export function DocsEditor({
   };
 
   const handleDelete = async () => {
+    // eslint-disable-next-line no-alert
     if (window.confirm(`Delete "${doc.title}"? This cannot be undone.`)) {
       await onDelete(doc.id);
     }
@@ -698,6 +698,7 @@ export function DocsEditor({
 
     // If unpublishing, require confirmation
     if (doc.isPublished) {
+      // eslint-disable-next-line no-alert
       const confirmed = window.confirm(
         "Unpublish this document? It will revert to draft status and may no longer be visible to viewers."
       );

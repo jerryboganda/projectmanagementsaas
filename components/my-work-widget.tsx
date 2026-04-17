@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { Clock, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { DashboardTaskItem } from "@/lib/dashboard/types";
+import { distance, transitions, stagger } from "@/lib/motion";
 
 const fallbackTasks: DashboardTaskItem[] = [
   {
@@ -109,9 +110,9 @@ export function MyWorkWidget({ tasks, isLoading = false }: MyWorkWidgetProps) {
           return (
             <motion.div
               key={task.id}
-              initial={{ opacity: 0, x: -8 }}
+              initial={{ opacity: 0, x: -distance.md }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: 0.2 + i * 0.05 }}
+              transition={{ ...transitions.base, delay: 0.08 + i * stagger.base }}
               className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.03] cursor-pointer transition-colors group"
             >
               <StatusIcon className={`size-4 flex-shrink-0 ${config.color}`} />

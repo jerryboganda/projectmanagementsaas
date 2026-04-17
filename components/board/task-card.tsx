@@ -60,6 +60,15 @@ export function TaskCard({ task, assignee, index, isSelected, onClick, isDragDis
           {...provided.draggableProps}
           {...provided.dragHandleProps}
           onClick={onClick}
+          role="button"
+          tabIndex={0}
+          aria-label={task.title}
+          onKeyDown={e => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onClick();
+            }
+          }}
           className={`
             group relative bg-neutral-surface border rounded-lg p-3.5 cursor-grab active:cursor-grabbing transition-all duration-200
             hover:bg-white/[0.03] hover:border-neutral-border-hover

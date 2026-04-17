@@ -1,0 +1,807 @@
+plan_id: security-hardening
+objective: "OWASP Top 10 security audit of the Linear Precision PM SaaS codebase"
+focus_area: security-hardening-owasp
+created_at: "2026-04-16T00:00:00Z"
+created_by: gem-researcher
+status: completed
+
+tldr: |
+  - Auth architecture is solid: httpOnly refresh cookies, JWT with Redis blocklist revocation, ASP.NET Identity lockout, FluentValidation on all auth endpoints. Access tokens are held in React state only (not localStorage).
+  - CRITICAL: No security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options) are configured in either the backend API or the Next.js frontend. These are planned (docs reference them) but not implemented.
+  - CRITICAL: Rate limiting is defined in Program.cs but never applied to any endpoint group — no `.RequireRateLimiting()` call exists in the codebase, leaving auth brute-force and AI endpoints unprotected.
+  - MEDIUM: Development-grade secrets are hardcoded in appsettings.json (JWT key, MinIO credentials, DB password) and shipped in the repo; the .env.example also contains weak placeholder secrets.
+  - MEDIUM: Error boundary exposes raw `error.message` to the user on the frontend; GlobalExceptionMiddleware exposes full stack traces in Development mode.
+  - No CSRF protection is configured (no antiforgery middleware); mitigated by JWT Bearer + SameSite cookies but not fully addressed for cookie-based refresh flow.
+  - No Next.js middleware.ts exists for auth route protection — all auth guards are client-side only.
+
+research_metadata:
+  methodology: "Hybrid retrieval: semantic_search + grep_search for pattern discovery, targeted read_file for detailed examination of auth flows, middleware, config, and frontend components."
+  scope: "Full-stack: frontend auth context, auth pages, API client, error handling, lib utilities; backend Program.cs, all auth infrastructure (JWT, refresh tokens, cookies, tenant resolution, policies), middleware pipeline, validators, config files, Dockerfile."
+  confidence: high
+  coverage: 85
+  decision_blockers: 2
+  research_blockers: 0
+
+files_analyzed:
+  - file: auth-context.tsx
+    path: contexts/auth-context.tsx
+    purpose: Frontend auth state management — token storage, login/logout/refresh/register orchestration
+    key_elements:
+      - element: AuthProvider
+        type: function
+        location: contexts/auth-context.tsx:55
+        description: "Stores accessToken in React useState (memory only — NOT localStorage). Refresh via httpOnly cookie. Good practice."
+      - element: toPersistedSession
+        type: function
+        location: contexts/auth-context.tsx:44
+        description: "Maps API response to client session; includes accessToken in the PersistedAuthSession type held in memory"
+    language: typescript
+    lines: 175
+
+  - file: client.ts
+    path: lib/api/client.ts
+    purpose: API client that attaches Bearer token and workspace header to all requests
+    key_elements:
+      - element: LinearPrecisionApiClient.request
+        type: function
+        location: lib/api/client.ts:237
+        description: "Sets credentials:'include' for cookie-based refresh flow. Attaches Authorization Bearer header from in-memory token."
+      - element: ApiError
+        type: class
+        location: lib/api/client.ts:162
+        description: "Custom error class exposing status and payload — payload could leak backend details to client"
+    language: typescript
+    lines: 400+
+
+  - file: error-utils.ts
+    path: lib/api/error-utils.ts
+    purpose: Extracts user-friendly error messages from API responses
+    key_elements:
+      - element: getApiErrorMessage
+        type: function
+        location: lib/api/error-utils.ts:37
+        description: "Falls through detail→title→message→fallback. Potential information leakage if backend sends verbose detail strings."
+    language: typescript
+    lines: 60
+
+  - file: redirects.ts
+    path: lib/auth/redirects.ts
+    purpose: Validates redirect URLs after login
+    key_elements:
+      - element: normalizeAppRedirect
+        type: function
+        location: lib/auth/redirects.ts:1
+        description: "Prevents open redirect — rejects non-relative URLs and protocol-relative URLs (//). Good practice."
+    language: typescript
+    lines: 13
+
+  - file: error-boundary.tsx
+    path: components/error-boundary.tsx
+    purpose: React error boundary for graceful failure
+    key_elements:
+      - element: ErrorBoundary.render
+        type: function
+        location: components/error-boundary.tsx:41
+        description: "Renders this.state.error?.message directly to user. Could inadvertently expose internal details."
+      - element: componentDidCatch
+        type: function
+        location: components/error-boundary.tsx:30
+        description: "Logs error + errorInfo to console.error — acceptable for dev, but logs could expose stack traces in production."
+    language: typescript
+    lines: 66
+
+  - file: LoginPage
+    path: app/login/page.tsx
+    purpose: Login form
+    key_elements:
+      - element: handleSubmit
+        type: function
+        location: app/login/page.tsx:28
+        description: "Submits email+password; errors shown via getApiErrorMessage with fallback. Proper autoComplete attributes set."
+    language: typescript
+    lines: 112
+
+  - file: RegisterPage
+    path: app/register/page.tsx
+    purpose: Registration form
+    key_elements:
+      - element: handleSubmit
+        type: function
+        location: app/register/page.tsx:30
+        description: "Client-side password match check; no client-side password strength validation (relies on backend). Missing rate-limit on submit."
+    language: typescript
+    lines: 122
+
+  - file: ForgotPasswordPage
+    path: app/forgot-password/page.tsx
+    purpose: Password reset request
+    key_elements:
+      - element: handleSubmit
+        type: function
+        location: app/forgot-password/page.tsx:18
+        description: "Good practice: shows same response regardless of email existence. Prevents user enumeration."
+    language: typescript
+    lines: 85
+
+  - file: ResetPasswordPage
+    path: app/reset-password/page.tsx
+    purpose: Token-based password reset form
+    key_elements:
+      - element: handleSubmit
+        type: function
+        location: app/reset-password/page.tsx:23
+        description: "Validates email+token presence. Token passed as URL query parameter (standard practice)."
+    language: typescript
+    lines: 108
+
+  - file: Program.cs
+    path: backend/src/LinearPrecision.Api/Program.cs
+    purpose: Backend application bootstrap — DI, middleware pipeline, endpoint mapping
+    key_elements:
+      - element: Rate limiter config
+        type: pattern
+        location: backend/src/LinearPrecision.Api/Program.cs:226
+        description: "Three rate limiters defined (global/auth/ai) but NEVER applied via .RequireRateLimiting() on any endpoint"
+      - element: CORS config
+        type: pattern
+        location: backend/src/LinearPrecision.Api/Program.cs:211
+        description: "AllowAnyHeader + AllowAnyMethod + AllowCredentials with origin whitelist. Functional but AllowAnyMethod is overly permissive."
+      - element: JWT validation
+        type: pattern
+        location: backend/src/LinearPrecision.Api/Program.cs:119
+        description: "ClockSkew=Zero, validates issuer/audience/lifetime/signing key, Redis blocklist check on OnTokenValidated. Good."
+      - element: Identity config
+        type: pattern
+        location: backend/src/LinearPrecision.Api/Program.cs:96
+        description: "Lockout 15min/5 attempts, password requires digit+upper+lower+8 chars+4 unique. Solid."
+      - element: Middleware pipeline
+        type: pattern
+        location: backend/src/LinearPrecision.Api/Program.cs:316
+        description: "No security headers middleware in the pipeline. Missing HSTS, CSP, X-Frame-Options."
+    language: csharp
+    lines: 380+
+
+  - file: GlobalExceptionMiddleware.cs
+    path: backend/src/LinearPrecision.Api/Infrastructure/Middleware/GlobalExceptionMiddleware.cs
+    purpose: Global exception handler — maps exceptions to RFC 7807 ProblemDetails
+    key_elements:
+      - element: catch Exception block
+        type: pattern
+        location: backend/src/LinearPrecision.Api/Infrastructure/Middleware/GlobalExceptionMiddleware.cs:57
+        description: "SECURITY ISSUE: Exposes full ex.ToString() (stack trace) in Development mode. Should never leak in production, but env misconfiguration risk."
+    language: csharp
+    lines: 105
+
+  - file: JwtTokenGenerator.cs
+    path: backend/src/LinearPrecision.Api/Infrastructure/Auth/JwtTokenGenerator.cs
+    purpose: Generates JWT access tokens with user claims
+    key_elements:
+      - element: GenerateAccessToken
+        type: function
+        location: backend/src/LinearPrecision.Api/Infrastructure/Auth/JwtTokenGenerator.cs:21
+        description: "15-minute expiry, HmacSha256, includes jti for revocation. Good short-lived token design."
+      - element: GenerateRefreshToken
+        type: function
+        location: backend/src/LinearPrecision.Api/Infrastructure/Auth/JwtTokenGenerator.cs:60
+        description: "64-byte cryptographic random token. Good entropy."
+    language: csharp
+    lines: 67
+
+  - file: AuthCookieHelper.cs
+    path: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthCookieHelper.cs
+    purpose: Sets refresh token in httpOnly cookie
+    key_elements:
+      - element: SetRefreshTokenCookie
+        type: function
+        location: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthCookieHelper.cs:8
+        description: "SECURITY ISSUE: Secure flag is conditional on IsHttps. SameSite=Lax. In production behind HTTP proxy, Secure may be false."
+    language: csharp
+    lines: 20
+
+  - file: TokenService.cs
+    path: backend/src/LinearPrecision.Api/Modules/Identity/Services/TokenService.cs
+    purpose: Token pair generation, refresh rotation, revocation
+    key_elements:
+      - element: RefreshAsync
+        type: function
+        location: backend/src/LinearPrecision.Api/Modules/Identity/Services/TokenService.cs:83
+        description: "GOOD: Implements refresh token rotation — old token is deleted before issuing new one. Prevents replay."
+      - element: HashToken
+        type: function
+        location: backend/src/LinearPrecision.Api/Modules/Identity/Services/TokenService.cs:192
+        description: "SHA-256 hash of refresh token for Redis storage. Good practice — raw token never stored."
+    language: csharp
+    lines: 200
+
+  - file: AuthEndpoints.cs
+    path: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthEndpoints.cs
+    purpose: Registration, login, refresh, forgot/reset password, logout endpoints
+    key_elements:
+      - element: RegisterAsync
+        type: function
+        location: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthEndpoints.cs:66
+        description: "User enumeration vector: returns specific error 'A user with this email already exists.' on duplicate email"
+      - element: ForgotPasswordAsync
+        type: function
+        location: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthEndpoints.cs:243
+        description: "Returns 202 Accepted regardless of email existence. Good practice — prevents enumeration."
+    language: csharp
+    lines: 340
+
+  - file: TenantResolutionMiddleware.cs
+    path: backend/src/LinearPrecision.Api/Infrastructure/Middleware/TenantResolutionMiddleware.cs
+    purpose: Resolves workspace from X-Workspace-Id header or route
+    key_elements:
+      - element: InvokeAsync
+        type: function
+        location: backend/src/LinearPrecision.Api/Infrastructure/Middleware/TenantResolutionMiddleware.cs:22
+        description: "MEDIUM: Trusts X-Workspace-Id header value without verifying the user has membership in that workspace at the middleware level. Reliance on EF query filters and authorization policies for enforcement."
+    language: csharp
+    lines: 80+
+
+  - file: appsettings.json
+    path: backend/src/LinearPrecision.Api/appsettings.json
+    purpose: Application configuration including connection strings and secrets
+    key_elements:
+      - element: JWT Key
+        type: variable
+        location: backend/src/LinearPrecision.Api/appsettings.json:7
+        description: "CRITICAL: Hardcoded development JWT signing key in source-controlled config file"
+      - element: Storage credentials
+        type: variable
+        location: backend/src/LinearPrecision.Api/appsettings.json:15
+        description: "Hardcoded MinIO admin credentials (minioadmin/minioadmin)"
+      - element: DB connection
+        type: variable
+        location: backend/src/LinearPrecision.Api/appsettings.json:3
+        description: "Hardcoded database credentials (lp/dev)"
+    language: json
+    lines: 70
+
+  - file: next.config.ts
+    path: next.config.ts
+    purpose: Next.js framework configuration
+    key_elements:
+      - element: nextConfig
+        type: variable
+        location: next.config.ts:3
+        description: "No security headers configured. Missing CSP, HSTS, X-Frame-Options. No middleware.ts for server-side auth."
+    language: typescript
+    lines: 32
+
+  - file: PolicyRegistration.cs
+    path: backend/src/LinearPrecision.Api/Infrastructure/Auth/PolicyRegistration.cs
+    purpose: Authorization policies for workspace role checks
+    key_elements:
+      - element: WorkspaceRoleAuthorizationHandler
+        type: class
+        location: backend/src/LinearPrecision.Api/Infrastructure/Auth/PolicyRegistration.cs:40
+        description: "Verifies user membership + role in workspace from DB. Proper hierarchical role check."
+    language: csharp
+    lines: 90
+
+  - file: AppDbContext.cs
+    path: backend/src/LinearPrecision.Api/Infrastructure/Persistence/AppDbContext.cs
+    purpose: EF Core DbContext with tenant query filters
+    key_elements:
+      - element: HasQueryFilter
+        type: pattern
+        location: backend/src/LinearPrecision.Api/Infrastructure/Persistence/AppDbContext.cs:161
+        description: "Global query filters enforce tenant isolation. Entities scoped by WorkspaceId AND soft-delete."
+    language: csharp
+    lines: 172+
+
+patterns_found:
+  - category: architecture
+    pattern: "httpOnly cookie refresh + in-memory JWT access token"
+    description: "Refresh tokens stored in httpOnly, SameSite=Lax cookies. Access tokens held in React state only — never persisted to localStorage/sessionStorage. This is the OWASP-recommended pattern."
+    examples:
+      - file: contexts/auth-context.tsx
+        location: contexts/auth-context.tsx:55-70
+        snippet: "const [session, setSession] = useState<PersistedAuthSession | null>(null);"
+      - file: AuthCookieHelper.cs
+        location: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthCookieHelper.cs:8-18
+        snippet: "HttpOnly = true, SameSite = SameSiteMode.Lax, Secure = httpContext.Request.IsHttps"
+    prevalence: common
+
+  - category: architecture
+    pattern: "JWT revocation via Redis blocklist"
+    description: "Access token JTI is blocklisted in Redis on logout. OnTokenValidated event checks blocklist before accepting token."
+    examples:
+      - file: Program.cs
+        location: backend/src/LinearPrecision.Api/Program.cs:133-143
+        snippet: "var isBlocked = await db.KeyExistsAsync($\"blocklist:at:{jti}\"); if (isBlocked) context.Fail()"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Refresh token rotation"
+    description: "On refresh, old token is deleted from Redis before issuing new pair. Prevents refresh token replay attacks."
+    examples:
+      - file: TokenService.cs
+        location: backend/src/LinearPrecision.Api/Modules/Identity/Services/TokenService.cs:83-100
+        snippet: "await db.KeyDeleteAsync($\"{RefreshTokenKeyPrefix}{tokenHash}\"); ... return await GenerateTokenPairAsync(user)"
+    prevalence: common
+
+  - category: architecture
+    pattern: "EF Core global query filters for tenant isolation"
+    description: "TenantEntity types are filtered by WorkspaceId at the DbContext level. Worker jobs explicitly bypass with IgnoreQueryFilters()."
+    examples:
+      - file: AppDbContext.cs
+        location: backend/src/LinearPrecision.Api/Infrastructure/Persistence/AppDbContext.cs:161
+        snippet: ".HasQueryFilter(e => e.WorkspaceId == _tenantContext.WorkspaceId)"
+    prevalence: common
+
+  - category: error_handling
+    pattern: "RFC 7807 ProblemDetails for all API errors"
+    description: "GlobalExceptionMiddleware maps domain exceptions to typed ProblemDetails. Development mode leaks stack traces."
+    examples:
+      - file: GlobalExceptionMiddleware.cs
+        location: backend/src/LinearPrecision.Api/Infrastructure/Middleware/GlobalExceptionMiddleware.cs:57-63
+        snippet: "var detail = _environment.IsDevelopment() ? ex.ToString() : \"An unexpected error occurred.\";"
+    prevalence: common
+
+  - category: naming
+    pattern: "Open redirect prevention"
+    description: "normalizeAppRedirect rejects non-relative and protocol-relative URLs for login redirect parameter."
+    examples:
+      - file: redirects.ts
+        location: lib/auth/redirects.ts:1-13
+        snippet: "if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return null;"
+    prevalence: common
+
+  - category: architecture
+    pattern: "FluentValidation on all identity endpoints"
+    description: "All auth request types (Register, Login, ForgotPassword, ResetPassword) have dedicated FluentValidation validators."
+    examples:
+      - file: RegisterRequestValidator.cs
+        location: backend/src/LinearPrecision.Api/Modules/Identity/Validators/RegisterRequestValidator.cs:1-25
+        snippet: "RuleFor(x => x.Password).NotEmpty().MinimumLength(8).Matches(\"[A-Z]\").Matches(\"[a-z]\").Matches(\"[0-9]\")"
+    prevalence: common
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: AuthProvider (React Context)
+      responsibility: "Frontend auth state management and API coordination"
+      location: contexts/auth-context.tsx
+      relationship_to_domain: "Primary auth state holder — stores JWT in memory"
+    - component: GlobalExceptionMiddleware
+      responsibility: "Converts all unhandled exceptions to ProblemDetails"
+      location: backend/src/LinearPrecision.Api/Infrastructure/Middleware/GlobalExceptionMiddleware.cs
+      relationship_to_domain: "Controls what error information reaches the client"
+    - component: TenantResolutionMiddleware
+      responsibility: "Resolves tenant workspace from header or route"
+      location: backend/src/LinearPrecision.Api/Infrastructure/Middleware/TenantResolutionMiddleware.cs
+      relationship_to_domain: "Key tenant isolation boundary in the middleware pipeline"
+    - component: TokenService
+      responsibility: "JWT+refresh token pair lifecycle management"
+      location: backend/src/LinearPrecision.Api/Modules/Identity/Services/TokenService.cs
+      relationship_to_domain: "Core token security: rotation, hashing, revocation"
+  interfaces_used_by_domain:
+    - interface: ICurrentUser
+      location: backend/src/LinearPrecision.Api/Infrastructure/Auth/CurrentUserAccessor.cs
+      usage_pattern: "Extracts user identity from JWT claims via HttpContext"
+    - interface: ITenantContext
+      location: backend/src/LinearPrecision.Api/Infrastructure/Auth/TenantContext.cs
+      usage_pattern: "Carries resolved workspace ID through request pipeline"
+  data_flow_involving_domain: |
+    Login → AuthEndpoints.LoginAsync → Identity check → TokenService.GenerateTokenPairAsync →
+    JWT access token in response body + refresh token in httpOnly cookie →
+    Frontend stores accessToken in React state → API client sends Authorization: Bearer header →
+    Backend validates JWT + checks Redis blocklist → TenantResolutionMiddleware reads X-Workspace-Id →
+    EF query filters restrict data to workspace
+  key_relationships_to_domain:
+    - from: AuthEndpoints
+      to: TokenService
+      relationship: calls
+    - from: TokenService
+      to: JwtTokenGenerator
+      relationship: calls
+    - from: TokenService
+      to: Redis (IConnectionMultiplexer)
+      relationship: calls
+    - from: JwtBearerEvents.OnTokenValidated
+      to: Redis blocklist
+      relationship: calls
+    - from: AuthProvider (frontend)
+      to: LinearPrecisionApiClient
+      relationship: calls
+
+related_technology_stack:
+  languages_used_in_domain:
+    - TypeScript 5.9
+    - C# (.NET 9)
+  frameworks_used_in_domain:
+    - name: "ASP.NET Core Identity"
+      usage_in_domain: "User management, password hashing, lockout, email confirmation tokens"
+    - name: "JWT Bearer Authentication"
+      usage_in_domain: "Access token validation with HMAC-SHA256"
+    - name: "Next.js 15 App Router"
+      usage_in_domain: "Frontend routing, no middleware.ts for server-side auth guards"
+  libraries_used_in_domain:
+    - name: FluentValidation
+      purpose_in_domain: "Server-side request validation for all Identity endpoints"
+    - name: StackExchange.Redis
+      purpose_in_domain: "Refresh token storage, JWT blocklist, rate limit state"
+    - name: Microsoft.AspNetCore.RateLimiting
+      purpose_in_domain: "Defined but NOT applied to any endpoints"
+
+related_conventions:
+  naming_patterns_in_domain: "PascalCase for C# types; camelCase for TypeScript; *Request/*Response DTOs; *Validator for FluentValidation"
+  structure_of_domain: "Identity module: Endpoints/ + Models/ + Services/ + Validators/"
+  error_handling_in_domain: "GlobalExceptionMiddleware maps exceptions → ProblemDetails; frontend getApiErrorMessage extracts user-facing messages"
+  testing_in_domain: "MSTest under backend/tests/; no dedicated auth security tests found"
+  documentation_in_domain: "docs/observability-reliability-security-plan.md documents planned security headers but they are NOT implemented"
+
+related_dependencies:
+  internal:
+    - component: AppDbContext
+      relationship_to_domain: "EF Core query filters provide data-level tenant isolation"
+      direction: outbound
+    - component: IEmailService
+      relationship_to_domain: "Sends password reset emails"
+      direction: outbound
+  external:
+    - name: Microsoft.AspNetCore.Identity
+      purpose_for_domain: "User/password/lockout management"
+    - name: System.IdentityModel.Tokens.Jwt
+      purpose_for_domain: "JWT token creation and validation"
+    - name: StackExchange.Redis
+      purpose_for_domain: "Refresh token and blocklist storage"
+
+domain_security_considerations:
+  sensitive_areas:
+    - area: "JWT signing key hardcoded in appsettings.json"
+      location: backend/src/LinearPrecision.Api/appsettings.json:7
+      concern: "CRITICAL: Key 'super-secret-development-key-that-is-at-least-32-bytes-long!' is in source control. If this file is used in production, all tokens can be forged."
+    - area: "Database credentials hardcoded"
+      location: backend/src/LinearPrecision.Api/appsettings.json:3
+      concern: "MEDIUM: 'Username=lp;Password=dev' in source-controlled config"
+    - area: "MinIO credentials hardcoded"
+      location: backend/src/LinearPrecision.Api/appsettings.json:15-16
+      concern: "MEDIUM: 'minioadmin/minioadmin' default credentials in config"
+    - area: "No security headers in production"
+      location: "backend/src/LinearPrecision.Api/Program.cs (middleware pipeline), next.config.ts"
+      concern: "CRITICAL: No CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy headers configured"
+    - area: "Rate limiters not applied to endpoints"
+      location: backend/src/LinearPrecision.Api/Program.cs:226-255
+      concern: "CRITICAL: Auth rate limiter (20/15min) exists but no endpoint calls .RequireRateLimiting('auth'), enabling brute-force"
+    - area: "Refresh cookie Secure flag conditional"
+      location: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthCookieHelper.cs:15
+      concern: "MEDIUM: Secure = httpContext.Request.IsHttps — behind a reverse proxy with HTTP backend, cookies may be sent over HTTP"
+    - area: "User enumeration on registration"
+      location: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthEndpoints.cs:87
+      concern: "MEDIUM: Specific error 'A user with this email already exists' reveals account existence"
+    - area: "Error boundary leaks error.message"
+      location: components/error-boundary.tsx:52
+      concern: "LOW: Raw error.message displayed to users; backend ProblemDetails detail strings could contain internal info"
+    - area: "No CSRF/antiforgery protection"
+      location: "Not found in codebase"
+      concern: "MEDIUM: No antiforgery middleware. Partially mitigated by Bearer auth + SameSite cookies, but cookie-based refresh endpoint could be targeted."
+    - area: "No Next.js middleware.ts"
+      location: "Root of project (file does not exist)"
+      concern: "MEDIUM: All auth route protection is client-side only. Server-side rendering of protected pages may flash content before redirect."
+    - area: "Stack traces in Development mode"
+      location: backend/src/LinearPrecision.Api/Infrastructure/Middleware/GlobalExceptionMiddleware.cs:60
+      concern: "LOW: ex.ToString() sent to client in Development mode — risk if ASPNETCORE_ENVIRONMENT is misconfigured in production"
+    - area: "TenantResolutionMiddleware trusts header"
+      location: backend/src/LinearPrecision.Api/Infrastructure/Middleware/TenantResolutionMiddleware.cs:47-50
+      concern: "MEDIUM: X-Workspace-Id header is trusted without middleware-level membership check. EF query filters provide safety net, but a user could attempt to read data from a workspace they're not authorized for if any endpoint bypasses filters."
+  authentication_patterns_in_domain: |
+    JWT Bearer with 15-minute access tokens, Redis blocklist for revocation, refresh token rotation via httpOnly cookie, ASP.NET Identity password hashing with PBKDF2, account lockout after 5 failures for 15 minutes.
+  authorization_patterns_in_domain: |
+    Policy-based authorization with WorkspaceRoleRequirement checks (Owner > Admin > Member > Guest). EF global query filters scope all tenant data by WorkspaceId.
+  data_validation_in_domain: |
+    FluentValidation on all Identity request DTOs (Register, Login, ForgotPassword, ResetPassword). ASP.NET Identity enforces password policy. Frontend forms use HTML5 required + type validation but minimal client-side strength checks.
+
+testing_patterns:
+  framework: MSTest
+  coverage_areas:
+    - "Unit tests: backend/tests/LinearPrecision.Api.Tests/"
+    - "Worker tests: backend/tests/LinearPrecision.Worker.Tests/"
+    - "Integration tests: backend/tests/LinearPrecision.Integration.Tests/"
+    - "E2E: tests/e2e/auth-and-ai.spec.ts (Playwright)"
+  test_organization: "By project in backend/tests/; by feature in tests/e2e/"
+  mock_patterns:
+    - "TestDbContextFactory for in-memory DB in worker tests"
+    - "No dedicated auth security/penetration tests found"
+
+open_questions:
+  - question: "Is the production deployment behind a TLS-terminating reverse proxy that sets X-Forwarded-Proto?"
+    context: "AuthCookieHelper sets Secure based on IsHttps, which may be false behind HTTP-only backend. ASP.NET UseForwardedHeaders() is not configured in Program.cs."
+    type: decision_blocker
+    affects: ["cookie-security", "hsts-configuration"]
+  - question: "Are appsettings.json secrets overridden in production via environment variables or a secret manager?"
+    context: "The hardcoded JWT key and DB credentials in source control are a critical risk only if they leak to production unchanged."
+    type: decision_blocker
+    affects: ["secret-management", "jwt-security"]
+  - question: "Does EF global query filter + authorization policy provide sufficient defense against IDOR attacks?"
+    context: "TenantResolutionMiddleware sets tenant from a client-provided header without verifying membership at the middleware level. The authorization handler does verify, but only for endpoints that explicitly require policy."
+    type: research
+    affects: ["tenant-isolation", "idor-prevention"]
+  - question: "Should SameSite=Strict be used instead of Lax for the refresh cookie?"
+    context: "Lax allows the cookie to be sent on GET navigations from external sites. Since refresh is POST-only, Strict would add defense-in-depth."
+    type: nice_to_know
+    affects: ["csrf-protection"]
+
+gaps:
+  - area: "Security headers"
+    description: "No CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, or Permissions-Policy headers are set in either the backend API or the Next.js frontend. The observability-reliability-security-plan.md documents these as planned but they are not implemented."
+    impact: decision_blocker
+    affects: ["clickjacking-prevention", "xss-mitigation", "transport-security"]
+
+  - area: "Rate limiting application"
+    description: "Three rate limiters are configured in Program.cs (global, auth, ai) but NO endpoint or endpoint group calls .RequireRateLimiting(). The rate limiting middleware runs but has no policies bound to routes."
+    impact: decision_blocker
+    affects: ["brute-force-prevention", "dos-protection"]
+
+  - area: "CSRF protection"
+    description: "No antiforgery middleware or token validation. Bearer-token auth mitigates most CSRF, but the refresh endpoint consumes a cookie and is vulnerable to CSRF if browser behavior changes."
+    impact: research_blocker
+    affects: ["csrf-protection"]
+
+  - area: "Next.js middleware for server-side auth"
+    description: "No middleware.ts exists. All auth guards are client-side in the AppShellGuard component. Protected server components could render during SSR before the client-side redirect fires."
+    impact: research_blocker
+    affects: ["route-protection", "content-flash"]
+
+  - area: "Secret management"
+    description: "JWT key, DB password, MinIO credentials, Stripe keys, AI API key all have placeholder/development values in appsettings.json committed to source control. No evidence of integration with a secret manager (Azure Key Vault, AWS Secrets Manager, etc.)."
+    impact: decision_blocker
+    affects: ["credential-security"]
+
+  - area: "CORS AllowAnyMethod"
+    description: "CORS policy uses .AllowAnyMethod() which permits DELETE, PATCH, PUT from browser cross-origin requests. Should be restricted to only required methods."
+    impact: nice_to_know
+    affects: ["cors-hardening"]
+
+  - area: "User enumeration on registration"
+    description: "RegisterAsync returns a specific error message revealing whether an email is already registered. ForgotPassword correctly avoids this."
+    impact: nice_to_know
+    affects: ["information-disclosure"]
+
+  - area: "ForwardedHeaders not configured"
+    description: "UseForwardedHeaders() is not called in the middleware pipeline. Behind a reverse proxy, IsHttps will be false and client IP will be the proxy IP."
+    impact: research_blocker
+    affects: ["cookie-security", "ip-logging"]
+
+  - area: "No client-side password strength UI"
+    description: "Registration form mentions password requirements in text but has no real-time strength meter or client-side validation. Server rejects weak passwords, but UX is poor."
+    impact: nice_to_know
+    affects: ["ux-security"]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VULNERABILITY SUMMARY (OWASP Top 10 Mapped)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+owasp_vulnerability_report:
+
+  critical:
+    - id: SEC-001
+      owasp_category: "A05:2021 Security Misconfiguration"
+      title: "No security response headers (CSP, HSTS, X-Frame-Options)"
+      files:
+        - path: backend/src/LinearPrecision.Api/Program.cs
+          line_range: "316-325 (middleware pipeline)"
+          detail: "No security headers middleware registered. No X-Frame-Options → clickjacking. No CSP → XSS amplification. No HSTS → downgrade attacks."
+        - path: next.config.ts
+          line_range: "3-32"
+          detail: "No headers() configuration in Next.js config."
+      fix: |
+        Backend: Add a SecurityHeadersMiddleware before other middleware that sets:
+          X-Frame-Options: DENY
+          X-Content-Type-Options: nosniff
+          Referrer-Policy: strict-origin-when-cross-origin
+          Permissions-Policy: camera=(), microphone=(), geolocation=()
+          Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+          Strict-Transport-Security: max-age=31536000; includeSubDomains (if behind TLS)
+        Frontend: Add headers config in next.config.ts or create middleware.ts with appropriate headers.
+
+    - id: SEC-002
+      owasp_category: "A07:2021 Identification and Authentication Failures"
+      title: "Rate limiters defined but never applied to endpoints"
+      files:
+        - path: backend/src/LinearPrecision.Api/Program.cs
+          line_range: "226-255 (limiter definitions)"
+          detail: "Auth limiter (20/15min), global limiter (600/min), AI limiter (30 tokens) are configured but NO endpoint calls .RequireRateLimiting()"
+      fix: |
+        Apply rate limiting to endpoint groups:
+          group.MapPost("/register", ...).RequireRateLimiting("auth");
+          group.MapPost("/login", ...).RequireRateLimiting("auth");
+          group.MapPost("/forgot-password", ...).RequireRateLimiting("auth");
+          group.MapPost("/reset-password", ...).RequireRateLimiting("auth");
+        Apply global limiter as default: app.UseRateLimiter() is already called but needs
+        endpoint-level .RequireRateLimiting("global") or set GlobalLimiter.
+
+    - id: SEC-003
+      owasp_category: "A02:2021 Cryptographic Failures"
+      title: "Hardcoded secrets in source-controlled config"
+      files:
+        - path: backend/src/LinearPrecision.Api/appsettings.json
+          line_range: "7"
+          detail: "JWT key: 'super-secret-development-key-that-is-at-least-32-bytes-long!'"
+        - path: backend/src/LinearPrecision.Api/appsettings.json
+          line_range: "3"
+          detail: "DB credentials: 'Username=lp;Password=dev'"
+        - path: backend/src/LinearPrecision.Api/appsettings.json
+          line_range: "15-16"
+          detail: "MinIO: 'AccessKey=minioadmin, SecretKey=minioadmin'"
+        - path: .env.example
+          line_range: "10"
+          detail: "JWT_KEY placeholder is also weak"
+      fix: |
+        1. Move all secrets to environment variables or a secret manager (Azure Key Vault, AWS SSM).
+        2. Remove all real/default credentials from appsettings.json — use empty strings or throw on startup if missing.
+        3. Add appsettings.*.json to .gitignore or ensure only appsettings.json with non-secret defaults is committed.
+        4. Validate JWT key length at startup (minimum 256 bits for HMAC-SHA256).
+
+  medium:
+    - id: SEC-004
+      owasp_category: "A05:2021 Security Misconfiguration"
+      title: "Refresh cookie Secure flag conditional on IsHttps"
+      files:
+        - path: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthCookieHelper.cs
+          line_range: "15"
+          detail: "Secure = httpContext.Request.IsHttps — behind HTTP reverse proxy, Secure will be false"
+      fix: |
+        1. Configure UseForwardedHeaders() in Program.cs to trust X-Forwarded-Proto from the proxy.
+        2. Or unconditionally set Secure = true for production environments:
+           Secure = !builder.Environment.IsDevelopment() || httpContext.Request.IsHttps
+
+    - id: SEC-005
+      owasp_category: "A01:2021 Broken Access Control"
+      title: "No Next.js middleware.ts for server-side route protection"
+      files:
+        - path: "(root — file does not exist)"
+          line_range: "N/A"
+          detail: "No middleware.ts → all auth guards are client-side only via AppShellGuard component. Protected pages may render briefly during SSR before redirect."
+      fix: |
+        Create middleware.ts at project root that checks for refresh token cookie on protected routes
+        and redirects to /login if missing. This prevents server-side rendering of protected content.
+
+    - id: SEC-006
+      owasp_category: "A07:2021 Identification and Authentication Failures"
+      title: "User enumeration on registration endpoint"
+      files:
+        - path: backend/src/LinearPrecision.Api/Modules/Identity/Endpoints/AuthEndpoints.cs
+          line_range: "87-90"
+          detail: "Returns 'A user with this email already exists.' — reveals account existence"
+      fix: |
+        Return a generic validation error that does not confirm email existence, e.g.:
+        'Unable to create account with the provided details.' Or silently send a
+        'you already have an account' email to the existing user instead.
+
+    - id: SEC-007
+      owasp_category: "A05:2021 Security Misconfiguration"
+      title: "CORS AllowAnyMethod is overly permissive"
+      files:
+        - path: backend/src/LinearPrecision.Api/Program.cs
+          line_range: "214"
+          detail: ".AllowAnyMethod() permits all HTTP methods from allowed origins"
+      fix: |
+        Restrict to required methods:
+        policy.WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+
+    - id: SEC-008
+      owasp_category: "A08:2021 Software and Data Integrity Failures"
+      title: "No CSRF/antiforgery protection for cookie-based refresh"
+      files:
+        - path: "backend/src/LinearPrecision.Api (not configured)"
+          line_range: "N/A"
+          detail: "Refresh endpoint consumes httpOnly cookie without CSRF token validation. SameSite=Lax provides partial mitigation."
+      fix: |
+        Options (pick one):
+        1. Change SameSite from Lax to Strict for refresh cookie (may break cross-site login flows).
+        2. Add a custom X-CSRF header requirement on the refresh endpoint and verify it server-side.
+        3. Require refresh token in request body (already partially supported) and deprecate cookie-only path.
+
+    - id: SEC-009
+      owasp_category: "A01:2021 Broken Access Control"
+      title: "TenantResolutionMiddleware trusts X-Workspace-Id without membership verification"
+      files:
+        - path: backend/src/LinearPrecision.Api/Infrastructure/Middleware/TenantResolutionMiddleware.cs
+          line_range: "47-54"
+          detail: "Sets tenant context from header without checking user membership. Relies on authorization policies and EF query filters downstream."
+      fix: |
+        Add a membership check in TenantResolutionMiddleware:
+        - After resolving workspace ID and confirming user is authenticated,
+          verify the user has an active membership in the workspace before setting tenant context.
+        - Return 403 if membership is not found. This provides defense-in-depth beyond query filters.
+
+    - id: SEC-010
+      owasp_category: "A05:2021 Security Misconfiguration"
+      title: "ForwardedHeaders not configured for reverse proxy"
+      files:
+        - path: backend/src/LinearPrecision.Api/Program.cs
+          line_range: "316-325"
+          detail: "UseForwardedHeaders() is not called. Behind a proxy, RemoteIpAddress and IsHttps will be wrong."
+      fix: |
+        Add before UseCors():
+        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+        });
+
+  low:
+    - id: SEC-011
+      owasp_category: "A09:2021 Security Logging and Monitoring Failures"
+      title: "Error boundary exposes raw error.message to users"
+      files:
+        - path: components/error-boundary.tsx
+          line_range: "52"
+          detail: "Renders this.state.error?.message || fallback text. Backend ProblemDetails 'detail' strings could contain internal info."
+      fix: |
+        Replace direct error.message display with a generic message in production.
+        Log the actual error to an error reporting service (Sentry, etc.) instead.
+
+    - id: SEC-012
+      owasp_category: "A09:2021 Security Logging and Monitoring Failures"
+      title: "Stack trace exposure in Development GlobalExceptionMiddleware"
+      files:
+        - path: backend/src/LinearPrecision.Api/Infrastructure/Middleware/GlobalExceptionMiddleware.cs
+          line_range: "59-60"
+          detail: "ex.ToString() in Development mode — risk if ASPNETCORE_ENVIRONMENT misconfigured in production"
+      fix: |
+        Add a startup guard: if (app.Environment.IsProduction() && app.Configuration.GetValue<bool>("ShowDetailedErrors"))
+        throw new InvalidOperationException("ShowDetailedErrors must not be enabled in production.");
+        Or remove ex.ToString() entirely and always log server-side only.
+
+    - id: SEC-013
+      owasp_category: "A06:2021 Vulnerable and Outdated Components"
+      title: "No client-side password strength validation"
+      files:
+        - path: app/register/page.tsx
+          line_range: "30-48"
+          detail: "Only checks password === confirmPassword. No strength meter or client-side policy check."
+        - path: app/reset-password/page.tsx
+          line_range: "23-40"
+          detail: "Same: only match check, no strength validation."
+      fix: |
+        Add client-side password validation matching backend policy:
+        - Minimum 8 characters
+        - At least one uppercase, one lowercase, one digit
+        - At least 4 unique characters
+        Show real-time feedback with a strength meter component.
+
+    - id: SEC-014
+      owasp_category: "A09:2021 Security Logging and Monitoring Failures"
+      title: "No rate-limit feedback on frontend auth forms"
+      files:
+        - path: app/login/page.tsx
+          line_range: "28-47"
+          detail: "No handling for HTTP 429 responses. User sees generic error instead of 'too many attempts'."
+      fix: |
+        In getApiErrorMessage or the form handler, check for ApiError with status 429 and show
+        a specific message: 'Too many attempts. Please wait before trying again.'
+
+  security_patterns_missing:
+    - pattern: "Security response headers middleware"
+      description: "Must add CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy"
+      priority: critical
+
+    - pattern: "Rate limiting application to endpoints"
+      description: "Must call .RequireRateLimiting() on auth and AI endpoint groups"
+      priority: critical
+
+    - pattern: "Secret management integration"
+      description: "Must move secrets out of appsettings.json to environment variables or a vault solution"
+      priority: critical
+
+    - pattern: "Next.js middleware.ts for auth"
+      description: "Server-side route protection to prevent content flash and SSR of protected pages"
+      priority: medium
+
+    - pattern: "ForwardedHeaders middleware"
+      description: "Required for correct HTTPS detection and client IP logging behind reverse proxy"
+      priority: medium
+
+    - pattern: "Audit logging for security events"
+      description: "Login attempts, password changes, token revocations should be logged to a dedicated audit stream"
+      priority: medium
+
+    - pattern: "HTTP Strict Transport Security (HSTS)"
+      description: "Force HTTPS in browsers with HSTS header"
+      priority: medium
+
+    - pattern: "Input sanitization library for rich text"
+      description: "If any feature introduces rich text editing (docs module), DOMPurify or similar is required"
+      priority: low

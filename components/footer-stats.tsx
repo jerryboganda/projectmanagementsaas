@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { distance, duration, easing } from "@/lib/motion";
 
 interface FooterStatsProps {
   projectCount?: number;
@@ -29,9 +30,9 @@ export function FooterStats({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: distance.md }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.5, ease: "easeOut" }}
+      transition={{ duration: duration.slow, delay: 0.2, ease: easing.standard }}
       className="p-4 border border-neutral-border bg-neutral-surface flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-sm"
     >
       <div className="flex flex-wrap gap-6 md:gap-10">
@@ -64,7 +65,7 @@ export function FooterStats({
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${capacityPct}%` }}
-            transition={{ duration: 1, delay: 0.8, ease: "easeOut" }}
+            transition={{ duration: 1, delay: 0.4, ease: easing.standard }}
             className={cn("h-full", capacityColor)}
           />
         </div>

@@ -877,6 +877,7 @@ export function AutomationsLayout() {
   };
 
   const handleDelete = async (automation: AutomationSurfaceItem) => {
+    // eslint-disable-next-line no-alert
     if (!window.confirm(`Delete "${automation.name}"? This cannot be undone.`)) {
       return;
     }

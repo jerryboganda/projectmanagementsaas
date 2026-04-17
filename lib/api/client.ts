@@ -254,6 +254,15 @@ export class LinearPrecisionApiClient {
       headers.set(WORKSPACE_HEADER, workspaceId);
     }
 
+    // Apply a default 20s timeout to every request so an unreachable backend
+    // cannot leave the UI hung on pending network promises. Callers that pass
+    // an explicit AbortSignal keep full control and bypass the default.
+    const signal =
+      options.signal ??
+      (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+        ? AbortSignal.timeout(20_000)
+        : undefined);
+
     const response = await fetch(buildUrl(path), {
       ...options,
       headers,
@@ -262,6 +271,7 @@ export class LinearPrecisionApiClient {
           ? JSON.stringify(options.body)
           : undefined,
       credentials: "include",
+      signal,
     });
 
     const payload = await parseResponse(response);
@@ -295,9 +305,10 @@ export class LinearPrecisionApiClient {
     });
   }
 
-  refresh() {
+  refresh(options: { signal?: AbortSignal } = {}) {
     return this.request<AuthSessionResponse>("/api/v1/auth/refresh", {
       method: "POST",
+      signal: options.signal,
     });
   }
 

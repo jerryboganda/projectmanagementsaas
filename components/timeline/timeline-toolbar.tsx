@@ -58,7 +58,7 @@ export function TimelineToolbar({
           />
         </div>
 
-        <div className="h-4 w-px bg-neutral-border"></div>
+        <div className="h-4 w-px bg-neutral-border" />
 
         <div className="flex items-center gap-2">
           <div className="relative flex items-center">
@@ -138,7 +138,7 @@ export function TimelineToolbar({
           </button>
         </div>
 
-        <div className="h-4 w-px bg-neutral-border mx-1"></div>
+        <div className="h-4 w-px bg-neutral-border mx-1" />
 
         <span className="text-[12px] text-slate-500 font-mono">
           {itemCount} {itemCount === 1 ? 'item' : 'items'}

@@ -191,6 +191,7 @@ export function GoalsDetail({
   };
 
   const handleDelete = async () => {
+    // eslint-disable-next-line no-alert
     if (!window.confirm("Delete this goal? This action cannot be undone.")) {
       return;
     }
@@ -452,6 +453,7 @@ export function GoalsDetail({
                   <button
                     type="button"
                     onClick={() => {
+                      // eslint-disable-next-line no-alert
                       if (window.confirm(`Unlink "${project.name}" from this goal?`)) {
                         void onUnlinkProject(project.id);
                       }

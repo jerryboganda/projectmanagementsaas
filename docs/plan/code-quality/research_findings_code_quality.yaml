@@ -1,0 +1,461 @@
+plan_id: code-quality-deep-enhancement
+objective: "Investigate code quality issues across the PM SaaS frontend: large files, dead code, duplication, ESLint gaps, type safety, and import organization"
+focus_area: code-quality-cleanup
+created_at: "2026-04-16"
+created_by: gem-researcher
+status: completed
+
+tldr: |
+  - 15 component files exceed 300 lines; top offender is time-tracking-layout.tsx at 1,799 lines. Seven files are 600+ lines and need decomposition.
+  - contexts/app-data-context.tsx (714 lines) is legacy dead code: not mounted in providers.tsx, only re-exported by one data file. ai-copilot-provider.tsx is similarly legacy scaffolding.
+  - types/shared.ts exists but has zero consumers — all feature modules define their own types in local data.ts files, creating pervasive type duplication.
+  - ESLint config is bare-minimum (eslint-config-next only), no custom rules, no import ordering, no unused-import detection. Build does NOT run ESLint.
+  - TypeScript strict mode is enabled and there are zero `any` type usages and zero @ts-ignore directives — type safety is excellent.
+  - Five eslint-disable comments exist (3× react-hooks/exhaustive-deps, 1× set-state-in-effect, 1× no-img-element).
+
+research_metadata:
+  methodology: "Hybrid retrieval: grep_search for patterns, run_in_terminal for line counts and metrics, read_file for config examination. Two research passes."
+  scope: "All 144 frontend source files in components/, app/, contexts/, hooks/, lib/ (~38,429 lines). Config files at root."
+  confidence: high
+  coverage: 95
+  decision_blockers: 0
+  research_blockers: 0
+
+# ============================================================
+# 1. LARGE FILES (Top 15 over 300 lines)
+# ============================================================
+files_analyzed:
+- file: time-tracking-layout.tsx
+  path: components/time-tracking/time-tracking-layout.tsx
+  purpose: "Monolithic time-tracking feature: layout, surface, toolbar, detail, and all state in one file"
+  key_elements:
+  - element: TimeTrackingLayout
+    type: function
+    location: "components/time-tracking/time-tracking-layout.tsx"
+    description: "Single 1,799-line component — largest in codebase"
+  language: tsx
+  lines: 1799
+
+- file: docs-editor.tsx
+  path: components/docs/docs-editor.tsx
+  purpose: "Rich document editor with markdown, collaboration, and sidebar"
+  key_elements:
+  - element: DocsEditor
+    type: function
+    location: "components/docs/docs-editor.tsx"
+    description: "1,060-line editor component"
+  language: tsx
+  lines: 1060
+
+- file: automations-layout.tsx
+  path: components/automations/automations-layout.tsx
+  purpose: "Automations feature: create/edit rules, list, detail"
+  key_elements:
+  - element: AutomationsLayout
+    type: function
+    location: "components/automations/automations-layout.tsx"
+    description: "963-line layout combining all automations UI"
+  language: tsx
+  lines: 963
+
+- file: sprints-layout.tsx
+  path: components/sprints/sprints-layout.tsx
+  purpose: "Sprint management: planning, board, detail views"
+  key_elements:
+  - element: SprintsLayout
+    type: function
+    location: "components/sprints/sprints-layout.tsx"
+    description: "900-line monolithic sprint component"
+  language: tsx
+  lines: 900
+
+- file: templates-layout.tsx
+  path: components/templates/templates-layout.tsx
+  purpose: "Template gallery, preview, and creation"
+  key_elements:
+  - element: TemplatesLayout
+    type: function
+    location: "components/templates/templates-layout.tsx"
+    description: "850-line template management component"
+  language: tsx
+  lines: 850
+
+- file: task-detail.tsx
+  path: components/board/task-detail.tsx
+  purpose: "Full task detail panel with subtasks, comments, activity"
+  key_elements:
+  - element: TaskDetail
+    type: function
+    location: "components/board/task-detail.tsx"
+    description: "776-line detail view"
+  language: tsx
+  lines: 776
+
+- file: intake-layout.tsx
+  path: components/intake/intake-layout.tsx
+  purpose: "Intake request forms, submissions, review"
+  key_elements:
+  - element: IntakeLayout
+    type: function
+    location: "components/intake/intake-layout.tsx"
+    description: "769-line monolithic intake component"
+  language: tsx
+  lines: 769
+
+- file: goals-detail.tsx
+  path: components/goals/goals-detail.tsx
+  purpose: "OKR goal detail panel with linked projects and initiatives"
+  key_elements:
+  - element: GoalsDetail
+    type: function
+    location: "components/goals/goals-detail.tsx"
+    description: "746-line detail component"
+  language: tsx
+  lines: 746
+
+- file: integrations-panel.tsx
+  path: components/settings/integrations-panel.tsx
+  purpose: "Third-party integration settings (Slack, GitHub, etc.)"
+  key_elements:
+  - element: IntegrationsPanel
+    type: function
+    location: "components/settings/integrations-panel.tsx"
+    description: "700-line settings panel"
+  language: tsx
+  lines: 700
+
+- file: calendar-surface.tsx
+  path: components/calendar/calendar-surface.tsx
+  purpose: "Month/week/day calendar grid rendering"
+  key_elements:
+  - element: CalendarSurface
+    type: function
+    location: "components/calendar/calendar-surface.tsx"
+    description: "656-line calendar renderer"
+  language: tsx
+  lines: 656
+
+- file: command-palette.tsx
+  path: components/ui/command-palette.tsx
+  purpose: "Global command palette (Cmd+K)"
+  key_elements:
+  - element: CommandPalette
+    type: function
+    location: "components/ui/command-palette.tsx"
+    description: "640-line search and command UI"
+  language: tsx
+  lines: 640
+
+- file: portfolio-detail.tsx
+  path: components/portfolio/portfolio-detail.tsx
+  purpose: "Initiative detail panel"
+  key_elements:
+  - element: PortfolioDetail
+    type: function
+    location: "components/portfolio/portfolio-detail.tsx"
+    description: "618-line detail view"
+  language: tsx
+  lines: 618
+
+- file: settings-content.tsx
+  path: components/settings/settings-content.tsx
+  purpose: "General settings tab content"
+  key_elements:
+  - element: SettingsContent
+    type: function
+    location: "components/settings/settings-content.tsx"
+    description: "601-line settings form"
+  language: tsx
+  lines: 601
+
+- file: timeline-surface.tsx
+  path: components/timeline/timeline-surface.tsx
+  purpose: "Gantt-style timeline rendering"
+  key_elements:
+  - element: TimelineSurface
+    type: function
+    location: "components/timeline/timeline-surface.tsx"
+    description: "598-line timeline component"
+  language: tsx
+  lines: 598
+
+- file: app-data-context.tsx
+  path: contexts/app-data-context.tsx
+  purpose: "Legacy in-memory mock data store — NOT mounted"
+  key_elements:
+  - element: AppDataProvider
+    type: function
+    location: "contexts/app-data-context.tsx"
+    description: "714-line legacy context, documented as dead code"
+  language: tsx
+  lines: 714
+
+# ============================================================
+# 2. DEAD CODE CANDIDATES
+# ============================================================
+dead_code_candidates:
+- file: contexts/app-data-context.tsx
+  lines: 714
+  evidence: |
+    - NOT mounted in app/providers.tsx (removed per decision-log.md entry)
+    - docs/project-ssot.md line 25 states: "Legacy dead code (app-data-context.tsx) has been removed" — but the file still exists
+    - docs/architecture.md line 68: "no longer mounted ... no current source consumers remain outside the file itself"
+    - Only one external import exists: components/projects/data.ts re-exports 4 types from it
+  recommendation: "Move the 4 re-exported types to types/shared.ts, then delete the file"
+
+- file: components/ai-copilot-provider.tsx
+  evidence: |
+    - Mounted in app/providers.tsx (AiCopilotProvider wraps children)
+    - Only consumer: components/header.tsx imports useAiCopilot
+    - docs/decision-log.md line 161: "Keep ... as legacy/demo scaffolding until explicit cleanup approval"
+    - The AI copilot is demo-only — no real AI backend integration exists
+  recommendation: "Flagged as legacy scaffolding. Low priority but a removal candidate."
+
+- file: types/shared.ts
+  evidence: |
+    - Defines User, TaskStatus, ProjectStatus, etc.
+    - Zero imports found across the codebase — no file uses `from "@/types/shared"`
+    - Duplicate of types already defined in contexts/app-data-context.tsx and individual data.ts files
+  recommendation: "Either consolidate all feature data.ts types into this file and import from here, or delete it"
+
+# ============================================================
+# 3. DUPLICATED PATTERNS
+# ============================================================
+patterns_found:
+- category: type-duplication
+  pattern: "User/Member types duplicated across feature modules"
+  description: |
+    The `User` interface is defined independently in:
+    - contexts/app-data-context.tsx (line 9)
+    - types/shared.ts (line 3)
+    - components/settings/data.ts has UserProfile (line 51) and Member (line 71)
+    - components/intake/data.ts has MockMember (line 280)
+    Each feature data.ts defines its own owner/assignee shapes instead of importing from a shared location.
+  examples:
+  - file: contexts/app-data-context.tsx
+    location: "line 9"
+    snippet: "export interface User { id: string; name: string; initials: string; avatar?: string; ... }"
+  - file: types/shared.ts
+    location: "line 3"
+    snippet: "export interface User { id: string; name: string; initials: string; avatar?: string; ... }"
+  prevalence: common
+
+- category: type-duplication
+  pattern: "Status and priority enums duplicated across modules"
+  description: |
+    Multiple modules define their own status/priority unions:
+    - app-data-context.tsx: TaskStatus, TaskPriority, ProjectStatus, GoalStatus, etc.
+    - types/shared.ts: TaskStatus, ProjectStatus, InitiativeStatus, GoalStatus, HealthStatus, Priority, ExtendedPriority
+    - components/timeline/data.ts: TimelineStatus, TimelinePriority
+    - components/workload/data.ts: WorkloadTone
+    - components/goals/data.ts: GoalSurfaceStatus (different values than GoalStatus in shared.ts)
+  examples:
+  - file: types/shared.ts
+    location: "line 16"
+    snippet: "export type TaskStatus = 'To Do' | 'In Progress' | 'In Review' | 'Done';"
+  - file: contexts/app-data-context.tsx
+    location: "line 12"
+    snippet: "export type TaskStatus = 'To Do' | 'In Progress' | 'In Review' | 'Done';"
+  prevalence: common
+
+- category: architecture
+  pattern: "Monolithic layout components"
+  description: |
+    The project convention calls for layout → surface → toolbar → detail separation, but 6 features
+    consolidate everything into a single *-layout.tsx file: time-tracking, automations, sprints,
+    templates, intake. These files combine state management, toolbar, surface grid, and detail panel
+    in one file, making them 769–1,799 lines.
+  examples:
+  - file: components/time-tracking/time-tracking-layout.tsx
+    location: "entire file"
+    snippet: "1,799 lines: state + toolbar + surface + detail + data"
+  - file: components/automations/automations-layout.tsx
+    location: "entire file"
+    snippet: "963 lines: state + create/edit modal + list + detail"
+  prevalence: common
+
+- category: architecture
+  pattern: "Inline status badge components"
+  description: |
+    Status badge rendering is duplicated as local components/functions in multiple files:
+    - components/sprints/sprints-layout.tsx defines SprintStatusBadge (line 52)
+    - components/issue-list.tsx defines PriorityBadge (line 16)
+    - components/workload/workload-surface.tsx uses Badge with inline tone logic
+    - components/workload/workload-detail.tsx duplicates the same Badge + tone pattern
+    There is a shared components/ui/badge.tsx but usage is inconsistent.
+  examples:
+  - file: components/sprints/sprints-layout.tsx
+    location: "line 52"
+    snippet: "function SprintStatusBadge({ status }: { status: ... }) {"
+  - file: components/issue-list.tsx
+    location: "line 16"
+    snippet: "const PriorityBadge = ({ priority }: { priority: string }) => {"
+  prevalence: occasional
+
+# ============================================================
+# 4. ESLINT GAPS
+# ============================================================
+eslint_analysis:
+  config_file: eslint.config.mjs
+  config_contents: |
+    Uses flat config with defineConfig.
+    Only extends: eslint-config-next (which includes next/core-web-vitals, react, react-hooks).
+    Zero custom rules defined.
+    Zero plugin additions beyond defaults.
+  eslint_version: "9.39.1"
+  eslint_config_next_version: "16.0.8"
+
+  build_integration: |
+    next.config.ts does NOT set `eslint.ignoreDuringBuilds` (defaults to false in Next.js 15).
+    However, the user states ESLint is disabled during builds — this may be configured elsewhere
+    or the build simply succeeds because lint passes.
+
+  missing_rules:
+  - rule: "import/order or @typescript-eslint/consistent-type-imports"
+    impact: "Import ordering convention stated in .claude/rules/frontend.md is not enforced"
+  - rule: "no-unused-vars / @typescript-eslint/no-unused-vars"
+    impact: "Dead exports and unused imports won't be caught automatically"
+  - rule: "@typescript-eslint/no-explicit-any"
+    impact: "Low risk currently (zero any usage found) but no guard against regression"
+  - rule: "react/no-array-index-key"
+    impact: "No check for key={index} anti-pattern"
+  - rule: "max-lines or max-lines-per-function"
+    impact: "No guard against file/function bloat"
+
+  existing_suppressions:
+  - file: components/timeline/timeline-create-modal.tsx
+    rule: react-hooks/exhaustive-deps
+    count: 2
+  - file: components/board/board-surface.tsx
+    rule: react-hooks/set-state-in-effect
+    count: 1
+  - file: components/board/task-detail.tsx
+    rule: "@next/next/no-img-element"
+    count: 1
+  - file: components/onboarding/onboarding-wizard.tsx
+    rule: react-hooks/exhaustive-deps
+    count: 1
+
+# ============================================================
+# 5. TYPE SAFETY
+# ============================================================
+type_safety_analysis:
+  tsconfig_strict: true
+  no_emit: true
+  skip_lib_check: true
+  module_resolution: bundler
+  typecheck_config: "tsconfig.typecheck.json extends tsconfig.json with incremental:false, excludes .next"
+
+  any_usage: 0
+  ts_ignore_count: 0
+  ts_expect_error_count: 0
+  assessment: |
+    Type safety is excellent. Strict mode is enabled, there are zero any types and zero
+    ts-ignore/ts-expect-error directives in the codebase. All 144 frontend source files pass
+    typecheck cleanly.
+
+# ============================================================
+# 6. IMPORT ORGANIZATION
+# ============================================================
+import_organization:
+  stated_convention: "React/Next → external libs → local components → types/data"
+  enforcement: "None — no ESLint import/order rule configured"
+  assessment: |
+    The convention is documented in .claude/rules/frontend.md but not enforced by tooling.
+    Manual inspection shows most files follow the convention loosely, but there is no guarantee
+    of consistency across 144 files. Adding eslint-plugin-import with import/order rule
+    would enforce this automatically.
+
+# ============================================================
+# 7. ACTIONABLE IMPROVEMENTS (ranked by impact)
+# ============================================================
+actionable_improvements:
+- rank: 1
+  title: "Decompose 6 monolithic layout files"
+  impact: "HIGH — reduces cognitive load, enables parallel editing, follows project conventions"
+  files_affected:
+  - components/time-tracking/time-tracking-layout.tsx (1,799 lines → ~4 files)
+  - components/automations/automations-layout.tsx (963 lines → ~4 files)
+  - components/sprints/sprints-layout.tsx (900 lines → ~4 files)
+  - components/templates/templates-layout.tsx (850 lines → ~4 files)
+  - components/intake/intake-layout.tsx (769 lines → ~4 files)
+  - components/docs/docs-editor.tsx (1,060 lines → ~3 files)
+  effort: "Medium per file — extract surface, toolbar, detail into siblings, keep layout as coordinator"
+
+- rank: 2
+  title: "Delete or consolidate dead legacy code"
+  impact: "HIGH — removes 714+ lines of confusion, resolves docs contradictions"
+  files_affected:
+  - contexts/app-data-context.tsx (delete after moving 4 type re-exports)
+  - types/shared.ts (either adopt as canonical or delete)
+  - components/projects/data.ts (update import source)
+  effort: "Low — 15 minute task"
+
+- rank: 3
+  title: "Consolidate duplicated types into types/shared.ts"
+  impact: "HIGH — eliminates drift between feature modules, establishes single source of truth"
+  files_affected:
+  - types/shared.ts (expand to be canonical)
+  - 12 data.ts files in components/*/
+  effort: "Medium — audit each data.ts, move shared types, update imports"
+
+- rank: 4
+  title: "Add ESLint rules for import ordering and unused variables"
+  impact: "MEDIUM — prevents regression, enforces documented conventions"
+  files_affected:
+  - eslint.config.mjs
+  - package.json (add eslint-plugin-import, @typescript-eslint/eslint-plugin)
+  effort: "Low — config-only change, auto-fixable"
+
+- rank: 5
+  title: "Extract shared UI primitives (StatusBadge, PriorityBadge)"
+  impact: "MEDIUM — reduces duplication across feature modules"
+  files_affected:
+  - components/ui/badge.tsx (extend)
+  - components/sprints/sprints-layout.tsx
+  - components/issue-list.tsx
+  - components/workload/workload-surface.tsx
+  - components/workload/workload-detail.tsx
+  effort: "Low"
+
+- rank: 6
+  title: "Review and fix 5 eslint-disable suppressions"
+  impact: "LOW — only 5 suppressions, most are legitimate react-hooks edge cases"
+  files_affected:
+  - components/timeline/timeline-create-modal.tsx (2)
+  - components/board/board-surface.tsx (1)
+  - components/board/task-detail.tsx (1)
+  - components/onboarding/onboarding-wizard.tsx (1)
+  effort: "Low"
+
+- rank: 7
+  title: "Add max-lines ESLint rule as a warning"
+  impact: "LOW — prevents new files from growing unchecked"
+  files_affected:
+  - eslint.config.mjs
+  effort: "Trivial"
+
+# ============================================================
+# GAPS & OPEN QUESTIONS
+# ============================================================
+open_questions:
+- question: "Should types/shared.ts become the canonical type home, or should each feature keep co-located types?"
+  context: "types/shared.ts exists with thorough definitions but zero consumers. data.ts files per feature work but create drift."
+  type: decision_blocker
+  affects: ["type-consolidation"]
+
+- question: "Is ai-copilot-provider.tsx approved for removal or must it stay as demo scaffolding?"
+  context: "docs/decision-log.md says keep until explicit approval. It is mounted and has one consumer."
+  type: nice_to_know
+  affects: ["dead-code-cleanup"]
+
+gaps:
+- area: "Import ordering compliance"
+  description: "No automated check exists. Manual spot-check looks reasonable but 144 files were not individually verified."
+  impact: nice_to_know
+  affects: ["eslint-config-improvement"]
+
+- area: "Backend code quality"
+  description: "This research focused on frontend only. Backend C# code was not analyzed."
+  impact: research_blocker
+  affects: ["backend-code-quality"]

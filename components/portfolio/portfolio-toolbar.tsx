@@ -43,7 +43,7 @@ export function PortfolioToolbar({
           />
         </div>
 
-        <div className="h-4 w-px bg-neutral-border"></div>
+        <div className="h-4 w-px bg-neutral-border" />
 
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -75,7 +75,7 @@ export function PortfolioToolbar({
             <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-slate-500 pointer-events-none" />
           </div>
 
-          <div className="h-4 w-px bg-neutral-border mx-1"></div>
+          <div className="h-4 w-px bg-neutral-border mx-1" />
           
           <div className="relative flex items-center gap-2">
             <ListFilter className="size-3.5 text-slate-500" />
@@ -110,7 +110,7 @@ export function PortfolioToolbar({
           </button>
         </div>
 
-        <div className="h-4 w-px bg-neutral-border mx-1"></div>
+        <div className="h-4 w-px bg-neutral-border mx-1" />
 
           <span className="text-[12px] text-slate-500 font-mono">
           {goalCount} {goalCount === 1 ? 'goal' : 'goals'}

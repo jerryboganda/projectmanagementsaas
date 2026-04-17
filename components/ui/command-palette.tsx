@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { overlayVariants, scalePopVariants, transitions } from '@/lib/motion';
 import { useAuth } from '@/contexts/auth-context';
 import { useWorkspace } from '@/contexts/workspace-context';
 import { useDocumentsData } from '@/hooks/use-documents-data';
@@ -556,18 +557,19 @@ export function CommandPalette({
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]">
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.1 }}
+            variants={overlayVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
             className="absolute inset-0 bg-black/60"
             onClick={onClose}
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -10 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            variants={scalePopVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            transition={transitions.fast}
             className="relative w-full max-w-[540px] mx-4 bg-neutral-surface border border-neutral-border rounded-lg shadow-2xl overflow-hidden"
             onKeyDown={handleKeyDown}
           >

@@ -12,6 +12,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle2, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { distance, transitions } from '@/lib/motion';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -87,10 +88,10 @@ function ToastItem({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 16, scale: 0.95 }}
+      initial={{ opacity: 0, y: distance.lg, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 80, scale: 0.95 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
+      exit={{ opacity: 0, x: distance.xl * 2, scale: 0.97 }}
+      transition={transitions.base}
       className={cn(
         'w-80 bg-neutral-surface border border-neutral-border rounded-lg shadow-xl border-l-2 overflow-hidden',
         borderColor

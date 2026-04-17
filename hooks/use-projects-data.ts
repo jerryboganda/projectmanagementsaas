@@ -3,8 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/contexts/auth-context";
-import type { ProjectSurfaceItem, ProjectUpdateInput } from "@/lib/projects/types";
-import { toProjectSurfaceItem, toUpdateProjectRequest } from "@/lib/projects/types";
+import {
+  toProjectSurfaceItem,
+  toUpdateProjectRequest,
+  type ProjectSurfaceItem,
+  type ProjectUpdateInput,
+} from "@/lib/projects/types";
 
 export function projectsListQueryKey(workspaceId: string | null) {
   return ["projects", workspaceId] as const;

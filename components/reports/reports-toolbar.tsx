@@ -68,7 +68,7 @@ export function ReportsToolbar({ activeReport, onExport, dateRange, onDateRangeC
           {activeReport?.title || 'Reports'}
         </h1>
 
-        <div className="h-4 w-px bg-neutral-border/50 mx-2"></div>
+        <div className="h-4 w-px bg-neutral-border/50 mx-2" />
 
         <div className="flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-300">
           <Database className="w-4 h-4" />

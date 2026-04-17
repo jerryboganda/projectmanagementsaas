@@ -150,7 +150,7 @@ const queryKeys = {
 | Project health | `GET /api/v1/projects?pageSize=50` + computed metrics | `projects.list` | staleTime: 60s |
 | KPI: total tasks | `GET /api/v1/analytics/workload` | `analytics.workload` | staleTime: 5min |
 | KPI: overdue count | `GET /api/v1/tasks?dueDate.lt=today&status.ne=Done&pageSize=0` | `tasks.overdue` | staleTime: 60s |
-| Recent activity | `GET /api/v1/admin/audit-log?pageSize=10` | `activity.recent` | staleTime: 30s |
+| Recent activity | `GET /api/v1/admin/audit-events?pageSize=10` | `activity.recent` | staleTime: 30s |
 | Unread notifications | `GET /api/v1/notifications?isRead=false&pageSize=0` | `notifications.unread` | staleTime: 15s |
 
 **SignalR:** `NotificationHub` — update unread count in real-time.

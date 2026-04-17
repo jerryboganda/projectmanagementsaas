@@ -19,7 +19,7 @@ export function AuthShell({
   footer,
 }: AuthShellProps) {
   return (
-    <main className="flex-1 min-h-screen bg-background-dark relative overflow-y-auto">
+    <main id="main-content" className="flex-1 min-h-screen bg-background-dark relative overflow-y-auto">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.16),_transparent_38%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.14),_transparent_34%)]" />
       <div className="relative min-h-screen px-6 py-10 md:px-10">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center justify-center">

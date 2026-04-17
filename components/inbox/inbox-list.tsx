@@ -164,7 +164,7 @@ function InboxRow({ item, isSelected, onSelect, onMarkAsRead, onArchive, onSave,
             )}
           </div>
           {item.unread && (
-            <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-primary border-2 border-background-dark shadow-[0_0_8px_rgba(19,19,236,0.6)]"></span>
+            <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-primary border-2 border-background-dark shadow-[0_0_8px_rgba(19,19,236,0.6)]" />
           )}
         </div>
         

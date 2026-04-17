@@ -79,23 +79,29 @@ export function CalendarToolbar({
       <div className="flex items-center gap-4 flex-1">
         <div className="flex items-center gap-2">
           <button 
+            type="button"
             onClick={goToToday}
+            aria-label="Jump to today"
             className="px-3 py-1.5 text-[13px] font-medium text-slate-300 hover:text-slate-100 bg-white/[0.02] hover:bg-white/[0.05] border border-neutral-border rounded-sm transition-colors"
           >
             Today
           </button>
-          <div className="flex items-center bg-white/[0.02] border border-neutral-border rounded-sm">
+          <div className="flex items-center bg-white/[0.02] border border-neutral-border rounded-sm" role="group" aria-label="Navigate dates">
             <button 
+              type="button"
               onClick={() => navigateDate("prev")}
+              aria-label="Previous period"
               className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] transition-colors border-r border-neutral-border"
             >
-              <ChevronLeft className="size-4" />
+              <ChevronLeft className="size-4" aria-hidden="true" />
             </button>
             <button 
+              type="button"
               onClick={() => navigateDate("next")}
+              aria-label="Next period"
               className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] transition-colors"
             >
-              <ChevronRight className="size-4" />
+              <ChevronRight className="size-4" aria-hidden="true" />
             </button>
           </div>
           <h2 className="text-[15px] font-medium text-slate-200 ml-2 min-w-[140px]">
@@ -103,7 +109,7 @@ export function CalendarToolbar({
           </h2>
         </div>
 
-        <div className="h-4 w-px bg-neutral-border mx-2"></div>
+        <div className="h-4 w-px bg-neutral-border mx-2" />
 
         <div className="flex items-center gap-2">
           <div className="relative group w-48">
@@ -130,10 +136,14 @@ export function CalendarToolbar({
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="flex items-center bg-white/[0.02] border border-neutral-border rounded-sm p-0.5">
+        <div className="flex items-center bg-white/[0.02] border border-neutral-border rounded-sm p-0.5" role="radiogroup" aria-label="Calendar view mode">
           {(["month", "week", "day", "agenda"] as ViewMode[]).map((mode) => (
             <button 
               key={mode}
+              type="button"
+              role="radio"
+              aria-checked={viewMode === mode}
+              aria-label={`${mode} view`}
               onClick={() => onViewModeChange(mode)}
               className={`px-2.5 py-1 text-[12px] font-medium rounded-sm transition-colors capitalize ${viewMode === mode ? "bg-white/[0.08] text-slate-200" : "text-slate-500 hover:text-slate-300"}`}
             >
@@ -142,13 +152,13 @@ export function CalendarToolbar({
           ))}
         </div>
 
-        <div className="h-4 w-px bg-neutral-border mx-1"></div>
+        <div className="h-4 w-px bg-neutral-border mx-1" />
 
         <span className="text-[12px] text-slate-500 font-mono">
           {itemCount} {itemCount === 1 ? 'item' : 'items'}
         </span>
-        <button onClick={onNewEvent} className="h-8 px-3 border border-primary bg-primary hover:bg-primary/90 text-white flex items-center gap-1.5 rounded-sm transition-colors">
-          <Plus className="size-[16px]" />
+        <button type="button" onClick={onNewEvent} aria-label="Create new event" className="h-8 px-3 border border-primary bg-primary hover:bg-primary/90 text-white flex items-center gap-1.5 rounded-sm transition-colors">
+          <Plus className="size-[16px]" aria-hidden="true" />
           <span className="text-[12px] font-medium">New Event</span>
         </button>
       </div>

@@ -1,0 +1,1604 @@
+plan_id: ENHANCE-001
+variant: c
+objective: >
+  Deep overhaul of PM SaaS codebase across 7 domains: code quality, security,
+  UI/UX, testing, integration, performance, documentation.
+  VARIANT C orders waves by impact-first: highest bang-for-buck improvements first.
+created_at: "2026-04-16"
+created_by: gem-planner
+status: pending
+research_confidence: high
+
+plan_metrics:
+  total_tasks: 31
+  total_waves: 7
+  wave_1_task_count: 4
+  total_dependencies: 38
+  risk_score: 6
+
+tldr: |
+  Impact-first ordering: dead code + code splitting (instant DX/bundle win) → security headers + UI primitives →
+  rate limiters + accessibility + type consolidation → component extraction + responsive → loading states +
+  middleware + remaining security → integration + perf tuning → ESLint + docs sync.
+  31 tasks across 7 waves. 4 tasks in wave 1 for maximum parallelism.
+  Key serialization constraint: providers.tsx, globals.css, sidebar.tsx, header.tsx, layout.tsx must stay serialized.
+
+open_questions: []
+
+pre_mortem:
+  overall_risk_level: medium
+  critical_failure_modes:
+    - scenario: "Dead code removal breaks hidden import chain"
+      likelihood: low
+      impact: high
+      mitigation: "Build + typecheck validation immediately after each removal. Grep for all transitive imports before deleting."
+    - scenario: "CSP header blocks inline scripts or styles used by Next.js"
+      likelihood: medium
+      impact: high
+      mitigation: "Start with report-only CSP; add nonces for Next.js script injection. Test with browser devtools before enforcing."
+    - scenario: "Component extraction introduces state-management regression in large files"
+      likelihood: medium
+      impact: high
+      mitigation: "Extract one component at a time, validate build after each. Keep state in parent layout, pass via props."
+    - scenario: "Dynamic imports cause flash-of-unstyled-content or layout shift"
+      likelihood: medium
+      impact: medium
+      mitigation: "Use ssr:false only for chart/DnD components. Provide loading fallbacks with correct dimensions."
+    - scenario: "Rate limiter policy breaks existing integration tests"
+      likelihood: low
+      impact: medium
+      mitigation: "Use test-specific rate limit bypass header or generous test limits. Run dotnet test after wiring."
+    - scenario: "providers.tsx serialization bottleneck slows multi-task waves"
+      likelihood: high
+      impact: low
+      mitigation: "Only one task per wave touches providers.tsx. Other tasks in same wave work on disjoint files."
+  assumptions:
+    - "All 4 research findings are high-confidence and current as of 2026-04-16"
+    - "Frontend build (npm run build) is the primary regression gate for frontend changes"
+    - "Backend has 78 passing tests that must remain green throughout"
+    - "No Git repo — no branch strategy; all changes are direct edits"
+    - "Intake is the only feature still on mock data; other 11 features use real API hooks"
+    - "Rate limiting policies exist in Program.cs but no .RequireRateLimiting() calls on endpoint groups"
+    - "next.config.ts output: 'standalone' is set; transpilePackages: ['motion'] is already configured"
+
+implementation_specification:
+  code_structure: |
+    Changes span 7 domains across frontend (app/, components/, contexts/, hooks/, lib/) and
+    backend (backend/src/LinearPrecision.Api/). New files: middleware.ts, loading.tsx routes,
+    7 UI primitives in components/ui/, types/shared.ts consolidation. Major extractions in
+    6 monolithic component files. Backend changes limited to Program.cs, appsettings, and
+    next.config.ts for headers.
+  affected_areas:
+    - "contexts/ — remove app-data-context.tsx, update providers.tsx"
+    - "types/shared.ts — consolidate User/Status/Priority from 4+ data.ts files"
+    - "components/ui/ — add Button, Input, Avatar, Tooltip, Skeleton, Dropdown, Progress"
+    - "components/time-tracking/ — extract into layout/surface/toolbar/detail"
+    - "components/docs/ — extract docs-editor.tsx into sub-components"
+    - "components/automations/ — extract automations-layout.tsx"
+    - "next.config.ts — add security headers"
+    - "backend/src/LinearPrecision.Api/Program.cs — apply rate limiters to endpoint groups"
+    - "backend/src/LinearPrecision.Api/appsettings*.json — externalize secrets"
+    - "app/ — add middleware.ts, loading.tsx files, dynamic imports"
+    - "eslint.config.mjs — enhance with import ordering and unused detection"
+    - "docs/ — sync architecture, feature matrix, integration status"
+  component_details:
+    - component: "Dead Code Cleanup"
+      responsibility: "Remove app-data-context.tsx, clean types/shared.ts, remove from providers.tsx"
+      interfaces:
+        - "No new interfaces — removal only"
+    - component: "Code Splitting Module"
+      responsibility: "Dynamic imports for Recharts, DnD, markdown, AI copilot"
+      interfaces:
+        - "next/dynamic with ssr:false and loading fallbacks"
+    - component: "Security Headers"
+      responsibility: "CSP, HSTS, X-Frame-Options, X-Content-Type-Options on both Next.js and ASP.NET"
+      interfaces:
+        - "next.config.ts headers array"
+        - "ASP.NET UseHsts(), UseXContentTypeOptions() middleware"
+    - component: "UI Primitives"
+      responsibility: "7 shared components: Button, Input, Avatar, Tooltip, Skeleton, Dropdown, Progress"
+      interfaces:
+        - "React FC with variant/size props, cn() for styling, forwardRef where applicable"
+    - component: "Accessibility Layer"
+      responsibility: "ARIA attributes, focus-visible rings, skip-link, keyboard navigation"
+      interfaces:
+        - "No new APIs — attribute additions to existing components"
+    - component: "Auth Middleware"
+      responsibility: "Server-side route protection via Next.js middleware.ts"
+      interfaces:
+        - "NextResponse redirect for unauthenticated requests to protected routes"
+  dependencies:
+    - component: "Code Splitting"
+      relationship: "Must run after dead code removal (dead context removal affects module graph)"
+    - component: "UI Primitives"
+      relationship: "Foundation for accessibility and responsive work in later waves"
+    - component: "Accessibility"
+      relationship: "Depends on UI primitives being available"
+    - component: "Loading States"
+      relationship: "Uses Skeleton primitive from UI primitives wave"
+    - component: "Documentation"
+      relationship: "Final wave — depends on all implementation being complete"
+  integration_points:
+    - "providers.tsx — dead context removal (wave 1)"
+    - "next.config.ts — security headers (wave 2), code splitting config (wave 1)"
+    - "Program.cs — rate limiter application (wave 3)"
+    - "middleware.ts — new file for auth guards (wave 5)"
+    - "eslint.config.mjs — rule enhancement (wave 7)"
+
+contracts:
+  - from_task: "W1-DEAD-CODE"
+    to_task: "W1-CODE-SPLIT"
+    interface: "Clean module graph with no dead contexts in provider stack"
+    format: "providers.tsx must not import app-data-context after removal"
+  - from_task: "W2-UI-PRIMITIVES"
+    to_task: "W3-A11Y"
+    interface: "Button, Input, Avatar, Tooltip, Skeleton, Dropdown, Progress components exist in components/ui/"
+    format: "React FC exports with variant props and forwardRef"
+  - from_task: "W2-UI-PRIMITIVES"
+    to_task: "W5-LOADING"
+    interface: "Skeleton component available for loading states"
+    format: "Skeleton component in components/ui/skeleton.tsx"
+  - from_task: "W4-EXTRACT-TIME"
+    to_task: "W4-RESPONSIVE"
+    interface: "Extracted components are individually targetable for responsive styles"
+    format: "Separate .tsx files under feature directory"
+  - from_task: "W1-DEAD-CODE"
+    to_task: "W7-DOCS"
+    interface: "All dead code removed; provider stack is clean"
+    format: "Updated providers.tsx and removed files"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WAVE 1: Dead Code Removal + Code Splitting (Instant DX + Bundle Win)
+# ═══════════════════════════════════════════════════════════════════════════════
+tasks:
+  - id: "W1-DEAD-CODE"
+    title: "Remove dead code: app-data-context, unused shared types, AI copilot provider cleanup"
+    description: |
+      Remove contexts/app-data-context.tsx (714 lines, zero consumers).
+      Remove its import and provider wrapper from app/providers.tsx.
+      Audit types/shared.ts for zero-import exports and remove or mark deprecated.
+      Verify ai-copilot-provider.tsx is actually consumed (if not, remove from providers.tsx too).
+      Run build + typecheck to confirm no breakage.
+    wave: 1
+    agent: gem-implementer
+    prototype: false
+    covers: ["Zero dead code files remain"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: []
+    conflicts_with: ["W5-MIDDLEWARE"]
+    context_files:
+      - path: contexts/app-data-context.tsx
+        description: "714-line dead context — target for removal"
+      - path: app/providers.tsx
+        description: "Provider stack — must remove dead context import/wrapper (SERIALIZED)"
+      - path: types/shared.ts
+        description: "Unused shared types file"
+      - path: components/ai-copilot-provider.tsx
+        description: "Legacy AI scaffolding — verify usage before removal"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Highest-impact DX improvement: removes 714+ lines of dead weight from module graph"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 3
+        estimated_lines: 30
+        focus_area: "contexts/, types/, providers.tsx"
+        verification:
+          - "npm run build succeeds"
+          - "npm run typecheck succeeds"
+          - "grep for app-data-context returns zero results"
+        acceptance_criteria:
+          - "app-data-context.tsx deleted or emptied"
+          - "types/shared.ts cleaned of zero-import exports"
+          - "providers.tsx no longer imports dead contexts"
+          - "Build and typecheck pass"
+        failure_modes:
+          - scenario: "Hidden transitive import breaks build"
+            likelihood: low
+            impact: high
+            mitigation: "Grep all imports of app-data-context before deleting; fix any remaining references"
+        tech_stack:
+          - "TypeScript"
+          - "Next.js App Router"
+        test_coverage: "Build + typecheck + grep verification"
+        requires_review: false
+
+  - id: "W1-CODE-SPLIT"
+    title: "Add dynamic imports for Recharts, DnD, markdown, and heavy components"
+    description: |
+      Use next/dynamic with ssr:false for:
+      - Recharts chart components (~200KB) in reports, portfolio, projects surfaces
+      - @hello-pangea/dnd DragDropContext in board surface (~40KB)
+      - react-markdown in docs surface
+      - AI copilot panel (if retained)
+      Add loading fallback components with matching dimensions to prevent layout shift.
+      Update next.config.ts with experimental.optimizePackageImports if beneficial.
+    wave: 1
+    agent: gem-implementer
+    prototype: false
+    covers: ["Heavy libraries loaded via dynamic import"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: []
+    conflicts_with: []
+    context_files:
+      - path: next.config.ts
+        description: "May need optimizePackageImports config"
+      - path: components/reports/
+        description: "Heavy Recharts usage"
+      - path: components/board/
+        description: "DnD library usage"
+      - path: components/docs/
+        description: "Markdown library usage"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Immediate bundle size reduction — biggest perf win for zero user-facing risk"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 120
+        focus_area: "components/ surfaces that import heavy libs"
+        verification:
+          - "npm run build succeeds"
+          - "Bundle analysis shows separate chunks for recharts, dnd, markdown"
+          - "No flash of missing content on page load"
+        acceptance_criteria:
+          - "Recharts, DnD, react-markdown loaded via next/dynamic"
+          - "Loading fallbacks render at correct dimensions"
+          - "Build passes with no new errors"
+        failure_modes:
+          - scenario: "SSR false causes hydration mismatch on components that read server state"
+            likelihood: low
+            impact: medium
+            mitigation: "Only apply ssr:false to pure client-side visualization components"
+        tech_stack:
+          - "next/dynamic"
+          - "React.lazy"
+          - "Suspense"
+        test_coverage: "Build + visual verification"
+        requires_review: false
+
+  - id: "W1-SECRETS"
+    title: "Externalize hardcoded secrets from appsettings.json"
+    description: |
+      Move hardcoded secrets (JWT signing key, MinIO credentials, DB connection string passwords)
+      from appsettings.json to environment variable references.
+      Update appsettings.json to use placeholder patterns like "${JWT_SECRET}" or
+      .NET configuration binding from env vars.
+      Update appsettings.Development.json to use dev-safe defaults.
+      Update .env.example with all required env var keys (no real values).
+      Verify backend builds and tests still pass.
+    wave: 1
+    agent: gem-implementer
+    prototype: false
+    covers: ["No hardcoded secrets in source"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: []
+    conflicts_with: []
+    context_files:
+      - path: backend/src/LinearPrecision.Api/appsettings.json
+        description: "Contains hardcoded JWT key, MinIO creds, DB password"
+      - path: backend/src/LinearPrecision.Api/appsettings.Development.json
+        description: "Development overrides"
+      - path: backend/src/LinearPrecision.Worker/appsettings.json
+        description: "Worker config may also have secrets"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "CRITICAL security fix — highest-priority remediation, zero frontend dependency"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 3
+        estimated_lines: 60
+        focus_area: "backend/src/*/appsettings*.json, .env.example"
+        verification:
+          - "grep for hardcoded passwords/keys returns zero in appsettings.json"
+          - "dotnet test passes (tests may use Development config)"
+          - ".env.example lists all required keys"
+        acceptance_criteria:
+          - "No plaintext secrets in any appsettings.json"
+          - "Environment variable references in place"
+          - ".env.example updated"
+          - "Backend builds and tests pass"
+        failure_modes:
+          - scenario: "Tests fail because they rely on hardcoded dev values"
+            likelihood: medium
+            impact: medium
+            mitigation: "Keep dev-safe defaults in appsettings.Development.json; tests use Development profile"
+        tech_stack:
+          - "ASP.NET Core configuration"
+          - ".NET environment variables"
+        test_coverage: "dotnet test backend/LinearPrecision.sln"
+        requires_review: true
+        review_depth: standard
+        review_security_sensitive: true
+
+  - id: "W1-VALIDATE"
+    title: "Wave 1 validation: build, typecheck, backend tests"
+    description: |
+      Run full validation suite after wave 1 changes:
+      - npm run lint
+      - npm run typecheck
+      - npm run build
+      - dotnet test backend/LinearPrecision.sln --no-restore
+      Report any failures for immediate remediation.
+    wave: 1
+    agent: gem-reviewer
+    prototype: false
+    covers: ["Frontend lint, typecheck, build all pass", "Backend 78/78 tests still pass"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W1-DEAD-CODE", "W1-CODE-SPLIT", "W1-SECRETS"]
+    conflicts_with: []
+    context_files: []
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Gate validation before wave 2 begins"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 0
+        estimated_lines: 0
+        focus_area: "Validation only"
+        verification:
+          - "All four commands exit 0"
+        acceptance_criteria:
+          - "npm run lint exits 0"
+          - "npm run typecheck exits 0"
+          - "npm run build exits 0"
+          - "dotnet test exits 0 with 78/78 pass"
+        failure_modes:
+          - scenario: "Lint or build failure from wave 1 changes"
+            likelihood: low
+            impact: high
+            mitigation: "Immediate fix by reimplementer before proceeding"
+        requires_review: true
+        review_depth: lightweight
+        review_security_sensitive: false
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # WAVE 2: Security Headers + UI Primitives (High-Visibility Security + Design Foundation)
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: "W2-SECURITY-HEADERS-NEXT"
+    title: "Add security headers to Next.js (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)"
+    description: |
+      Add headers configuration to next.config.ts with:
+      - Content-Security-Policy (start in report-only mode)
+      - Strict-Transport-Security
+      - X-Frame-Options: DENY
+      - X-Content-Type-Options: nosniff
+      - Referrer-Policy: strict-origin-when-cross-origin
+      - Permissions-Policy
+      Use nonces for Next.js inline scripts if needed.
+    wave: 2
+    agent: gem-implementer
+    prototype: false
+    covers: ["All security headers present in responses"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W1-VALIDATE"]
+    conflicts_with: ["W2-SECURITY-HEADERS-BACKEND"]
+    context_files:
+      - path: next.config.ts
+        description: "Add headers array to nextConfig"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "CRITICAL security gap — headers are planned but not implemented"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 1
+        estimated_lines: 50
+        focus_area: "next.config.ts"
+        verification:
+          - "curl -I localhost:3000 shows all security headers"
+          - "npm run build succeeds"
+        acceptance_criteria:
+          - "CSP header present (report-only initially)"
+          - "HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy all present"
+          - "Build passes"
+        failure_modes:
+          - scenario: "CSP blocks Next.js inline scripts"
+            likelihood: medium
+            impact: high
+            mitigation: "Use report-only mode first; add nonces via next.config experimental CSP support"
+        tech_stack:
+          - "Next.js config headers"
+        test_coverage: "curl -I and build validation"
+        requires_review: true
+        review_depth: standard
+        review_security_sensitive: true
+
+  - id: "W2-SECURITY-HEADERS-BACKEND"
+    title: "Add security headers to ASP.NET Core API"
+    description: |
+      In Program.cs middleware pipeline, add:
+      - app.UseHsts() (already may exist, verify)
+      - Custom middleware or UseSecurityHeaders for X-Content-Type-Options, X-Frame-Options
+      - CORS policy tightening: restrict AllowAnyOrigin to specific origins
+      - Secure cookie flags on refresh token cookie
+    wave: 2
+    agent: gem-implementer
+    prototype: false
+    covers: ["All security headers present in responses"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W1-VALIDATE"]
+    conflicts_with: ["W2-SECURITY-HEADERS-NEXT"]
+    context_files:
+      - path: backend/src/LinearPrecision.Api/Program.cs
+        description: "Middleware pipeline — add security header middleware"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "CRITICAL — backend API responses also need security headers"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 1
+        estimated_lines: 40
+        focus_area: "backend/src/LinearPrecision.Api/Program.cs"
+        verification:
+          - "dotnet test passes"
+          - "curl -I on API endpoints shows security headers"
+        acceptance_criteria:
+          - "X-Content-Type-Options, X-Frame-Options on API responses"
+          - "CORS restricted to allowed origins"
+          - "Secure flag on refresh token cookie"
+          - "Backend tests pass"
+        failure_modes:
+          - scenario: "CORS restriction breaks frontend API calls"
+            likelihood: medium
+            impact: high
+            mitigation: "Add localhost:3000 to allowed origins for development; use env var for production origin"
+        tech_stack:
+          - "ASP.NET Core middleware"
+        test_coverage: "dotnet test + curl validation"
+        requires_review: true
+        review_depth: standard
+        review_security_sensitive: true
+
+  - id: "W2-UI-PRIMITIVES"
+    title: "Build 7 missing UI primitive components"
+    description: |
+      Create in components/ui/:
+      - button.tsx (variants: primary, secondary, ghost, destructive; sizes: sm, md, lg)
+      - input.tsx (with label, error, disabled states)
+      - avatar.tsx (image + fallback initials, sizes)
+      - tooltip.tsx (position variants, delay)
+      - skeleton.tsx (pulse animation, width/height props)
+      - dropdown.tsx (trigger + menu pattern, keyboard nav)
+      - progress.tsx (determinate + indeterminate variants)
+      All components: forwardRef, cn() for styling, Tailwind only, ARIA attributes.
+    wave: 2
+    agent: gem-implementer
+    prototype: false
+    covers: []
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W1-VALIDATE"]
+    conflicts_with: []
+    context_files:
+      - path: components/ui/
+        description: "Existing 11 UI components — follow same patterns"
+      - path: lib/utils.ts
+        description: "cn() utility for conditional classes"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Foundation for accessibility, loading states, and responsive work in waves 3-5"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 7
+        estimated_lines: 280
+        focus_area: "components/ui/"
+        verification:
+          - "npm run build succeeds"
+          - "npm run typecheck succeeds"
+          - "Each component renders without errors"
+        acceptance_criteria:
+          - "7 new components in components/ui/"
+          - "All use forwardRef, cn(), Tailwind"
+          - "Keyboard accessible (tab, enter, escape)"
+          - "ARIA attributes present"
+          - "Build and typecheck pass"
+        failure_modes:
+          - scenario: "Name collisions with existing components or imports"
+            likelihood: low
+            impact: low
+            mitigation: "Check existing ui/ directory before creating; use unique exports"
+        tech_stack:
+          - "React 19"
+          - "Tailwind CSS v4"
+          - "Lucide React"
+        test_coverage: "Build + typecheck"
+        requires_review: false
+
+  - id: "W2-UI-REVIEW"
+    title: "Design review of new UI primitives for consistency and accessibility"
+    description: |
+      Review all 7 new UI primitives for:
+      - Visual consistency with existing design system tokens
+      - ARIA compliance and keyboard navigation
+      - forwardRef and prop APIs follow shadcn/ui conventions
+      - Tailwind usage matches project palette
+    wave: 2
+    agent: gem-designer
+    prototype: false
+    covers: []
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W2-UI-PRIMITIVES"]
+    conflicts_with: []
+    context_files:
+      - path: app/globals.css
+        description: "Design tokens"
+      - path: components/ui/
+        description: "New and existing primitives"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Quality gate for primitives before they are used in accessibility and responsive waves"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 0
+        estimated_lines: 0
+        focus_area: "components/ui/"
+        verification:
+          - "All primitives follow consistent prop patterns"
+          - "ARIA attributes verified"
+        acceptance_criteria:
+          - "Design review passes for all 7 components"
+          - "Any issues flagged for remediation"
+        failure_modes:
+          - scenario: "Significant design inconsistencies require rework"
+            likelihood: low
+            impact: medium
+            mitigation: "Fix in same wave before proceeding"
+        requires_review: true
+        review_depth: standard
+        review_security_sensitive: false
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # WAVE 3: Rate Limiters + Accessibility + Type Consolidation (Compliance + Quality)
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: "W3-RATE-LIMITERS"
+    title: "Apply rate limiting policies to auth and API endpoint groups"
+    description: |
+      In Program.cs, add .RequireRateLimiting("policy-name") to:
+      - Auth endpoints (login, register, refresh, forgot-password) — strict rate limit
+      - AI/LLM endpoints — moderate rate limit
+      - General API endpoints — permissive rate limit
+      Rate limit policies are already defined in AddRateLimiter(); this task wires them to endpoint groups.
+    wave: 3
+    agent: gem-implementer
+    prototype: false
+    covers: ["Rate limiters applied to auth endpoints"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W2-SECURITY-HEADERS-BACKEND"]
+    conflicts_with: []
+    context_files:
+      - path: backend/src/LinearPrecision.Api/Program.cs
+        description: "Rate limiter policies defined at line ~224; need .RequireRateLimiting() on endpoint groups"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "CRITICAL security gap — rate limiters defined but never applied"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 1
+        estimated_lines: 20
+        focus_area: "backend/src/LinearPrecision.Api/Program.cs"
+        verification:
+          - "dotnet test passes"
+          - "grep RequireRateLimiting shows hits on endpoint groups"
+        acceptance_criteria:
+          - "Auth endpoints have strict rate limiting"
+          - "AI endpoints have moderate rate limiting"
+          - "Backend tests pass (78/78)"
+        failure_modes:
+          - scenario: "Rate limiter blocks legitimate test requests"
+            likelihood: low
+            impact: medium
+            mitigation: "Use generous limits for tests; add test bypass header if needed"
+        tech_stack:
+          - "ASP.NET Core RateLimiting"
+        test_coverage: "dotnet test"
+        requires_review: true
+        review_depth: standard
+        review_security_sensitive: true
+
+  - id: "W3-A11Y"
+    title: "Add accessibility: ARIA attributes, focus-visible rings, skip-link, keyboard nav"
+    description: |
+      Add to sidebar.tsx: aria-label on nav, aria-current on active item, focus-visible ring on links.
+      Add to header.tsx: skip-link as first child, aria-labels on action buttons.
+      Add to board surface: aria-labels on columns and cards, keyboard drag support announcement.
+      Add to inbox: aria-labels on message items, aria-live region for new messages.
+      Add to goals: aria-labels on goal cards and progress indicators.
+      Use new Button/Input primitives where they replace raw elements.
+      Add focus-visible:ring-2 ring-primary utility to all interactive elements in globals.css.
+    wave: 3
+    agent: gem-implementer
+    prototype: false
+    covers: ["WCAG 2.1 AA keyboard navigation on sidebar, header, board"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W2-UI-PRIMITIVES", "W2-UI-REVIEW"]
+    conflicts_with: []
+    context_files:
+      - path: components/sidebar.tsx
+        description: "Navigation — needs ARIA (SERIALIZED FILE)"
+      - path: components/header.tsx
+        description: "App header — needs skip-link (SERIALIZED FILE)"
+      - path: components/board/
+        description: "Board needs keyboard drag support ARIA"
+      - path: components/inbox/
+        description: "Inbox needs aria-live"
+      - path: components/goals/
+        description: "Goals needs aria-labels"
+      - path: app/globals.css
+        description: "Add focus-visible utility (SERIALIZED FILE)"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "WCAG compliance + major UX improvement for assistive tech users"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 150
+        focus_area: "sidebar, header, board, inbox, goals, globals.css"
+        verification:
+          - "Tab through sidebar/header/board — focus ring visible on every interactive element"
+          - "Skip-link visible on Tab from page top"
+          - "Screen reader announces sidebar nav items correctly"
+        acceptance_criteria:
+          - "focus-visible ring on all interactive elements"
+          - "Skip-link in header"
+          - "ARIA labels on sidebar nav, board columns/cards, inbox items, goal cards"
+          - "Build and typecheck pass"
+        failure_modes:
+          - scenario: "Focus ring styling conflicts with existing hover/active states"
+            likelihood: low
+            impact: low
+            mitigation: "Use focus-visible (not focus) to avoid mouse-click ring; test with keyboard"
+        tech_stack:
+          - "Tailwind CSS focus-visible"
+          - "ARIA attributes"
+        test_coverage: "Build + manual keyboard navigation verification"
+        requires_review: false
+
+  - id: "W3-TYPE-CONSOLIDATION"
+    title: "Consolidate duplicated User/Status/Priority types into shared source"
+    description: |
+      Audit all components/*/data.ts files for duplicated type definitions.
+      Create or update types/shared.ts with canonical:
+      - User interface (id, name, email, avatar)
+      - Status string literal union
+      - Priority string literal union
+      Update all data.ts files to import from @/types/shared.
+      Remove local duplicate definitions.
+    wave: 3
+    agent: gem-implementer
+    prototype: false
+    covers: []
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W1-DEAD-CODE"]
+    conflicts_with: []
+    context_files:
+      - path: types/shared.ts
+        description: "Target file for consolidated types"
+      - path: components/board/data.ts
+        description: "Has local User/Status types"
+      - path: components/projects/data.ts
+        description: "Has local User/Status/Priority types"
+      - path: components/inbox/data.ts
+        description: "Has local types"
+      - path: components/goals/data.ts
+        description: "Has local types"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Reduces duplication across 4+ files; enables consistent type changes"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 120
+        focus_area: "types/shared.ts, components/*/data.ts"
+        verification:
+          - "npm run typecheck passes"
+          - "grep for 'interface User' in data.ts files returns zero (all use shared)"
+        acceptance_criteria:
+          - "Canonical User, Status, Priority types in types/shared.ts"
+          - "All data.ts files import from @/types/shared"
+          - "No duplicate type definitions remain"
+          - "Typecheck passes"
+        failure_modes:
+          - scenario: "Feature-specific fields on User differ across modules"
+            likelihood: medium
+            impact: medium
+            mitigation: "Use intersection types: SharedUser & { featureSpecificField: string }"
+        tech_stack:
+          - "TypeScript"
+        test_coverage: "typecheck"
+        requires_review: false
+
+  - id: "W3-VALIDATE"
+    title: "Wave 3 validation: full build + backend tests"
+    description: |
+      Full validation after wave 3:
+      - npm run lint && npm run typecheck && npm run build
+      - dotnet test backend/LinearPrecision.sln --no-restore
+    wave: 3
+    agent: gem-reviewer
+    prototype: false
+    covers: ["Frontend lint, typecheck, build all pass", "Backend 78/78 tests still pass"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W3-RATE-LIMITERS", "W3-A11Y", "W3-TYPE-CONSOLIDATION"]
+    conflicts_with: []
+    context_files: []
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Gate before component extraction wave"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 0
+        estimated_lines: 0
+        focus_area: "Validation"
+        verification:
+          - "All commands exit 0"
+        acceptance_criteria:
+          - "lint, typecheck, build, dotnet test all pass"
+        failure_modes:
+          - scenario: "Type consolidation breaks imports"
+            likelihood: low
+            impact: medium
+            mitigation: "Fix import paths immediately"
+        requires_review: true
+        review_depth: lightweight
+        review_security_sensitive: false
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # WAVE 4: Component Extraction (Top 3) + Responsive Design
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: "W4-EXTRACT-TIME"
+    title: "Extract time-tracking-layout.tsx (1,799 lines) into layout/surface/toolbar/detail"
+    description: |
+      Decompose components/time-tracking/time-tracking-layout.tsx into:
+      - time-tracking-layout.tsx (state management, composition — target <200 lines)
+      - time-tracking-surface.tsx (main content rendering)
+      - time-tracking-toolbar.tsx (search, filter, view controls)
+      - time-tracking-detail.tsx (expanded item view / side panel)
+      Keep state in layout, pass via props. Extract subcomponents as needed.
+    wave: 4
+    agent: gem-implementer
+    prototype: false
+    covers: ["No component file exceeds 400 lines"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W3-VALIDATE"]
+    conflicts_with: ["W4-EXTRACT-DOCS", "W4-EXTRACT-AUTO"]
+    context_files:
+      - path: components/time-tracking/time-tracking-layout.tsx
+        description: "1,799-line monolith — primary extraction target"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Largest file in codebase; biggest single DX improvement from extraction"
+        timestamp: "2026-04-16"
+        estimated_effort: large
+        estimated_files: 3
+        estimated_lines: 200
+        focus_area: "components/time-tracking/"
+        verification:
+          - "No file in components/time-tracking/ exceeds 400 lines"
+          - "npm run build succeeds"
+          - "Time tracking feature renders identically"
+        acceptance_criteria:
+          - "time-tracking-layout.tsx < 200 lines"
+          - "3+ new extracted component files"
+          - "All state passed via props, no prop drilling > 2 levels"
+          - "Build and typecheck pass"
+        failure_modes:
+          - scenario: "State management breaks during extraction"
+            likelihood: medium
+            impact: high
+            mitigation: "Extract one sub-component at a time; build after each extraction"
+        tech_stack:
+          - "React 19"
+          - "TypeScript"
+        test_coverage: "Build + visual verification"
+        requires_review: false
+
+  - id: "W4-EXTRACT-DOCS"
+    title: "Extract docs-editor.tsx (1,060 lines) into sub-components"
+    description: |
+      Decompose components/docs/docs-editor.tsx into:
+      - docs-editor.tsx (orchestration, state — target <300 lines)
+      - docs-toolbar.tsx (editor toolbar)
+      - docs-sidebar.tsx (document tree/navigation)
+      - docs-content.tsx (content rendering area)
+    wave: 4
+    agent: gem-implementer
+    prototype: false
+    covers: ["No component file exceeds 400 lines"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W3-VALIDATE"]
+    conflicts_with: ["W4-EXTRACT-TIME", "W4-EXTRACT-AUTO"]
+    context_files:
+      - path: components/docs/docs-editor.tsx
+        description: "1,060-line editor component"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Second-largest file; complex editor needs modular structure"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 180
+        focus_area: "components/docs/"
+        verification:
+          - "No file exceeds 400 lines"
+          - "Docs editor renders identically"
+          - "Build passes"
+        acceptance_criteria:
+          - "docs-editor.tsx < 300 lines"
+          - "3+ extracted sub-components"
+          - "Build and typecheck pass"
+        failure_modes:
+          - scenario: "Editor state tightly coupled to render logic"
+            likelihood: medium
+            impact: medium
+            mitigation: "Use callback props and composition; test rendering after each extraction step"
+        tech_stack:
+          - "React 19"
+          - "TypeScript"
+        test_coverage: "Build + visual verification"
+        requires_review: false
+
+  - id: "W4-EXTRACT-AUTO"
+    title: "Extract automations-layout.tsx into layout/surface/toolbar pattern"
+    description: |
+      Decompose components/automations/automations-layout.tsx into:
+      - automations-layout.tsx (composition, state)
+      - automations-surface.tsx (automation list/grid)
+      - automations-toolbar.tsx (search, filter controls)
+      - automations-detail.tsx (rule detail panel)
+    wave: 4
+    agent: gem-implementer
+    prototype: false
+    covers: ["No component file exceeds 400 lines"]
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W3-VALIDATE"]
+    conflicts_with: ["W4-EXTRACT-TIME", "W4-EXTRACT-DOCS"]
+    context_files:
+      - path: components/automations/automations-layout.tsx
+        description: "Large automations component"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Third target for extraction to meet 400-line constraint"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 160
+        focus_area: "components/automations/"
+        verification:
+          - "No file exceeds 400 lines"
+          - "Build passes"
+        acceptance_criteria:
+          - "automations-layout.tsx < 300 lines"
+          - "3+ extracted components"
+          - "Build and typecheck pass"
+        failure_modes:
+          - scenario: "Internal automation rule state is complex to decouple"
+            likelihood: medium
+            impact: medium
+            mitigation: "Keep rule-specific state in detail component; pass callbacks up"
+        tech_stack:
+          - "React 19"
+          - "TypeScript"
+        test_coverage: "Build + visual verification"
+        requires_review: false
+
+  - id: "W4-RESPONSIVE"
+    title: "Add responsive breakpoints to board, calendar, timeline"
+    description: |
+      Add Tailwind responsive classes to:
+      - Board: stack columns vertically at sm/md, horizontal scroll at lg+
+      - Calendar: simplified day view at sm, week view at md, month at lg+
+      - Timeline: vertical timeline at sm/md, horizontal at lg+
+      Target: usable at 768px width minimum.
+      Use existing Tailwind responsive prefixes (sm:, md:, lg:).
+    wave: 4
+    agent: gem-implementer
+    prototype: false
+    covers: ["Board and calendar render usably at 768px width"]
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W3-VALIDATE"]
+    conflicts_with: []
+    context_files:
+      - path: components/board/
+        description: "Board surface — needs responsive columns"
+      - path: components/calendar/
+        description: "Calendar — needs responsive view switching"
+      - path: components/timeline/
+        description: "Timeline — needs responsive orientation"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Major UX gap — these surfaces are desktop-only"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 200
+        focus_area: "components/board/, components/calendar/, components/timeline/"
+        verification:
+          - "Resize browser to 768px — board, calendar, timeline render usably"
+          - "No horizontal overflow at 768px"
+          - "Build passes"
+        acceptance_criteria:
+          - "Board columns stack/scroll at 768px"
+          - "Calendar shows usable view at 768px"
+          - "Timeline adapts orientation at 768px"
+          - "Build passes"
+        failure_modes:
+          - scenario: "DnD library doesn't support touch/mobile drag"
+            likelihood: medium
+            impact: medium
+            mitigation: "Disable drag on mobile; show move buttons instead"
+        tech_stack:
+          - "Tailwind CSS responsive"
+        test_coverage: "Build + resize verification"
+        requires_review: false
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # WAVE 5: Loading States + Middleware + Remaining Security
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: "W5-LOADING"
+    title: "Add skeleton loading components and route-level loading.tsx files"
+    description: |
+      Create loading.tsx files for high-traffic routes:
+      - app/board/loading.tsx
+      - app/projects/loading.tsx
+      - app/inbox/loading.tsx
+      - app/reports/loading.tsx
+      - app/calendar/loading.tsx
+      Each uses Skeleton component from components/ui/skeleton.tsx.
+      Match dimensions of actual content layout to prevent CLS.
+    wave: 5
+    agent: gem-implementer
+    prototype: false
+    covers: ["Loading skeletons visible on 5+ routes"]
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W2-UI-PRIMITIVES"]
+    conflicts_with: []
+    context_files:
+      - path: components/ui/skeleton.tsx
+        description: "Skeleton primitive (created in wave 2)"
+      - path: app/board/
+        description: "Board route — needs loading.tsx"
+      - path: app/projects/
+        description: "Projects route — needs loading.tsx"
+      - path: app/inbox/
+        description: "Inbox route — needs loading.tsx"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Perceived performance improvement via skeleton loading states"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 200
+        focus_area: "app/*/loading.tsx"
+        verification:
+          - "Navigate to each route — skeleton visible during data load"
+          - "No layout shift when real content replaces skeleton"
+          - "Build passes"
+        acceptance_criteria:
+          - "5+ route-level loading.tsx files"
+          - "All use Skeleton component"
+          - "Dimensions match actual content layout"
+          - "Build passes"
+        failure_modes:
+          - scenario: "Skeleton dimensions don't match, causing layout shift"
+            likelihood: medium
+            impact: low
+            mitigation: "Use fixed aspect ratios and match grid layout"
+        tech_stack:
+          - "Next.js App Router loading.tsx convention"
+          - "Skeleton component"
+        test_coverage: "Build + visual verification"
+        requires_review: false
+
+  - id: "W5-MIDDLEWARE"
+    title: "Create Next.js middleware.ts for server-side auth route protection"
+    description: |
+      Create middleware.ts at project root with:
+      - Protected route matcher (board, projects, inbox, reports, calendar, settings, etc.)
+      - Public route allowlist (login, register, forgot-password, reset-password)
+      - Check for auth cookie presence; redirect to /login if missing
+      - API route passthrough (handled by backend JWT)
+    wave: 5
+    agent: gem-implementer
+    prototype: false
+    covers: []
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W1-VALIDATE"]
+    conflicts_with: ["W1-DEAD-CODE"]
+    context_files:
+      - path: app/layout.tsx
+        description: "Root layout — understand route structure (SERIALIZED)"
+      - path: contexts/auth-context.tsx
+        description: "Current client-side auth — understand cookie/token pattern"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Server-side auth guard prevents flash of protected content for unauthenticated users"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 1
+        estimated_lines: 50
+        focus_area: "middleware.ts (new file at project root)"
+        verification:
+          - "Navigate to /board without auth — redirected to /login"
+          - "Navigate to /login without auth — renders normally"
+          - "Build passes"
+        acceptance_criteria:
+          - "middleware.ts exists at project root"
+          - "Protected routes redirect to /login"
+          - "Public routes accessible without auth"
+          - "Build passes"
+        failure_modes:
+          - scenario: "Middleware conflicts with API routes or static assets"
+            likelihood: low
+            impact: medium
+            mitigation: "Use matcher config to exclude api/, _next/, static assets"
+        tech_stack:
+          - "Next.js middleware"
+          - "NextResponse"
+        test_coverage: "Build + navigation verification"
+        requires_review: true
+        review_depth: standard
+        review_security_sensitive: true
+
+  - id: "W5-SECURITY-MEDIUM"
+    title: "Fix remaining medium OWASP issues: CSRF, user enumeration, ForwardedHeaders, error exposure"
+    description: |
+      - Add antiforgery middleware for cookie-based refresh flow in backend Program.cs
+      - Normalize auth error messages to prevent user enumeration (login, register, forgot-password)
+      - Add ForwardedHeaders middleware for reverse proxy setups
+      - Sanitize error.message in frontend error-boundary.tsx (show generic message, log details)
+      - Remove stack trace exposure in Development GlobalExceptionMiddleware
+    wave: 5
+    agent: gem-implementer
+    prototype: false
+    covers: []
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W3-RATE-LIMITERS"]
+    conflicts_with: []
+    context_files:
+      - path: backend/src/LinearPrecision.Api/Program.cs
+        description: "Middleware pipeline for antiforgery, ForwardedHeaders"
+      - path: components/error-boundary.tsx
+        description: "Frontend error boundary — sanitize error.message"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Medium OWASP findings — important for production readiness"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 100
+        focus_area: "backend/Program.cs, error-boundary.tsx, auth endpoints"
+        verification:
+          - "Login with invalid email shows generic error (no 'user not found')"
+          - "Error boundary shows user-friendly message"
+          - "dotnet test passes"
+        acceptance_criteria:
+          - "No user enumeration via auth endpoints"
+          - "Error boundary sanitizes messages"
+          - "ForwardedHeaders configured"
+          - "Backend tests pass"
+        failure_modes:
+          - scenario: "Generic error messages hurt debugging in development"
+            likelihood: medium
+            impact: low
+            mitigation: "Log detailed errors server-side; show generic only in production"
+        tech_stack:
+          - "ASP.NET Core"
+          - "React error boundary"
+        test_coverage: "dotnet test + manual verification"
+        requires_review: true
+        review_depth: standard
+        review_security_sensitive: true
+
+  - id: "W5-VALIDATE"
+    title: "Wave 5 validation: full suite"
+    description: |
+      Full validation after wave 5:
+      - npm run lint && npm run typecheck && npm run build
+      - dotnet test backend/LinearPrecision.sln --no-restore
+    wave: 5
+    agent: gem-reviewer
+    prototype: false
+    covers: ["Frontend lint, typecheck, build all pass", "Backend 78/78 tests still pass"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W5-LOADING", "W5-MIDDLEWARE", "W5-SECURITY-MEDIUM"]
+    conflicts_with: []
+    context_files: []
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Gate before integration wave"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 0
+        estimated_lines: 0
+        focus_area: "Validation"
+        verification:
+          - "All commands exit 0"
+        acceptance_criteria:
+          - "lint, typecheck, build, dotnet test all pass"
+        failure_modes:
+          - scenario: "Middleware or security changes break build/tests"
+            likelihood: low
+            impact: high
+            mitigation: "Immediate fix before proceeding"
+        requires_review: true
+        review_depth: lightweight
+        review_security_sensitive: false
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # WAVE 6: Integration + Performance Tuning
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: "W6-INTAKE-API"
+    title: "Migrate intake feature from mock data to real API"
+    description: |
+      Replace MOCK_ constants in intake data.ts with TanStack Query hooks.
+      Create useIntakeRequests() hook matching pattern of other feature hooks.
+      Wire to backend intake endpoints.
+      Add optimistic updates for create/update operations.
+    wave: 6
+    agent: gem-implementer
+    prototype: false
+    covers: []
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W5-VALIDATE"]
+    conflicts_with: []
+    context_files:
+      - path: components/intake/
+        description: "Intake feature surface"
+      - path: hooks/
+        description: "Existing TanStack Query hooks for pattern reference"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Last feature using mock data — complete the migration"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 150
+        focus_area: "components/intake/, hooks/"
+        verification:
+          - "Intake page renders with real API data"
+          - "Create/update operations work with optimistic UI"
+          - "Build passes"
+        acceptance_criteria:
+          - "No MOCK_ constants in intake data.ts"
+          - "useIntakeRequests() hook created"
+          - "Optimistic updates on mutations"
+          - "Build passes"
+        failure_modes:
+          - scenario: "Backend intake endpoints not yet implemented"
+            likelihood: medium
+            impact: high
+            mitigation: "Check backend routes first; if missing, create stub endpoints or flag as blocked"
+        tech_stack:
+          - "TanStack Query"
+          - "ASP.NET Core endpoints"
+        test_coverage: "Build + API call verification"
+        requires_review: false
+
+  - id: "W6-SIGNALR"
+    title: "Extend SignalR subscriptions to inbox, sprints, timeline"
+    description: |
+      Extend existing SignalR hub connection (currently board-only) to subscribe to:
+      - Inbox: MessageCreated, MessageRead events
+      - Sprints: SprintUpdated, TaskMoved events
+      - Timeline: MilestoneUpdated events
+      Use existing realtime-context.tsx pattern.
+      Add event handlers in each feature's hooks.
+    wave: 6
+    agent: gem-implementer
+    prototype: false
+    covers: []
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W5-VALIDATE"]
+    conflicts_with: []
+    context_files:
+      - path: contexts/realtime-context.tsx
+        description: "Existing SignalR provider — extend event types"
+      - path: hooks/
+        description: "Feature hooks to add realtime handlers"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Extend realtime capability beyond board for collaborative UX"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 150
+        focus_area: "contexts/realtime-context.tsx, feature hooks"
+        verification:
+          - "SignalR subscribes to new event types"
+          - "Feature hooks handle new events"
+          - "Build passes"
+        acceptance_criteria:
+          - "Inbox, sprints, timeline have realtime event handlers"
+          - "Events trigger UI updates without manual refresh"
+          - "Build passes"
+        failure_modes:
+          - scenario: "Backend hub doesn't broadcast new event types yet"
+            likelihood: medium
+            impact: medium
+            mitigation: "Add event types to frontend; backend handler additions can follow"
+        tech_stack:
+          - "@microsoft/signalr"
+          - "TanStack Query invalidation"
+        test_coverage: "Build + manual event verification"
+        requires_review: false
+
+  - id: "W6-PERF-TUNING"
+    title: "Add TanStack Query prefetching, gcTime tuning, and optimistic patterns"
+    description: |
+      - Add prefetchQuery on sidebar link hover for top 5 routes
+      - Set gcTime: 10 * 60 * 1000 (10min) for stable data (projects, goals)
+      - Add placeholderData patterns for list→detail transitions
+      - Configure optimistic updates for common mutations (task status change, inbox mark-read)
+    wave: 6
+    agent: gem-implementer
+    prototype: false
+    covers: []
+    priority: low
+    status: pending
+    flags: {}
+    dependencies: ["W5-VALIDATE"]
+    conflicts_with: []
+    context_files:
+      - path: app/providers.tsx
+        description: "QueryClient config — adjust defaults (SERIALIZED)"
+      - path: hooks/
+        description: "Feature hooks for prefetch and gcTime overrides"
+      - path: components/sidebar.tsx
+        description: "Add prefetch on hover (SERIALIZED)"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Perceived performance improvement via prefetching and caching"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 3
+        estimated_lines: 120
+        focus_area: "providers.tsx, sidebar.tsx, feature hooks"
+        verification:
+          - "Network tab shows prefetch requests on sidebar hover"
+          - "Detail pages load instantly after list hover"
+          - "Build passes"
+        acceptance_criteria:
+          - "Prefetch on top 5 sidebar links"
+          - "gcTime configured for stable data"
+          - "Optimistic updates on task status and inbox mark-read"
+          - "Build passes"
+        failure_modes:
+          - scenario: "Prefetch creates excessive API calls"
+            likelihood: low
+            impact: low
+            mitigation: "Use staleTime to avoid redundant fetches; debounce hover trigger"
+        tech_stack:
+          - "TanStack Query"
+        test_coverage: "Build + network verification"
+        requires_review: false
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # WAVE 7: ESLint Enhancement + Documentation Sync
+  # ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: "W7-ESLINT"
+    title: "Enhance ESLint config with import ordering, unused detection, and stricter rules"
+    description: |
+      Update eslint.config.mjs to add:
+      - eslint-plugin-import with import/order rule (React → external → local → types)
+      - eslint-plugin-unused-imports for automatic unused import removal
+      - no-console rule (warn)
+      - consistent-return rule
+      Install necessary plugins.
+      Run eslint --fix to auto-fix import ordering across codebase.
+    wave: 7
+    agent: gem-implementer
+    prototype: false
+    covers: []
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W5-VALIDATE"]
+    conflicts_with: []
+    context_files:
+      - path: eslint.config.mjs
+        description: "Current bare-minimum config"
+      - path: package.json
+        description: "Add ESLint plugins to devDependencies"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Dev tooling improvement — catches issues at development time"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 2
+        estimated_lines: 80
+        focus_area: "eslint.config.mjs, package.json"
+        verification:
+          - "npm run lint passes (may need baseline fixes)"
+          - "Import ordering enforced"
+          - "Unused imports detected"
+        acceptance_criteria:
+          - "eslint-plugin-import configured with import/order"
+          - "eslint-plugin-unused-imports configured"
+          - "npm run lint exits 0"
+        failure_modes:
+          - scenario: "New lint rules flag hundreds of existing violations"
+            likelihood: high
+            impact: medium
+            mitigation: "Run eslint --fix first for auto-fixable; baseline remaining with warn level"
+        tech_stack:
+          - "ESLint flat config"
+          - "eslint-plugin-import"
+          - "eslint-plugin-unused-imports"
+        test_coverage: "npm run lint"
+        requires_review: false
+
+  - id: "W7-DOCS-ARCH"
+    title: "Update architecture documentation to reflect all enhancement changes"
+    description: |
+      Update docs/architecture.md with:
+      - New middleware.ts auth guard documentation
+      - Updated provider stack (without dead contexts)
+      - Security headers configuration
+      - Code splitting strategy
+      - UI primitive component library
+      Update docs/feature-coverage-matrix.md with current status.
+    wave: 7
+    agent: gem-documentation-writer
+    prototype: false
+    covers: []
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W5-VALIDATE", "W6-INTAKE-API", "W6-SIGNALR"]
+    conflicts_with: ["W7-DOCS-INTEGRATION"]
+    context_files:
+      - path: docs/architecture.md
+        description: "Primary architecture doc"
+      - path: docs/feature-coverage-matrix.md
+        description: "Feature status matrix"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Docs must stay synchronized after major enhancement pass"
+        timestamp: "2026-04-16"
+        estimated_effort: medium
+        estimated_files: 2
+        estimated_lines: 200
+        focus_area: "docs/"
+        verification:
+          - "Architecture doc reflects current state"
+          - "Feature matrix is accurate"
+        acceptance_criteria:
+          - "architecture.md updated with middleware, security headers, code splitting, UI primitives"
+          - "feature-coverage-matrix.md reflects current feature status"
+          - "No stale references to dead code"
+        failure_modes:
+          - scenario: "Missing details from implementation waves"
+            likelihood: low
+            impact: low
+            mitigation: "Review implementation task outputs before writing docs"
+        task_type: update
+        audience: developers
+        coverage_matrix:
+          - "Architecture overview"
+          - "Security posture"
+          - "Component library"
+          - "Performance strategy"
+          - "Feature status"
+
+  - id: "W7-DOCS-INTEGRATION"
+    title: "Update integration matrix and project SSOT"
+    description: |
+      Update docs/frontend-to-backend-integration-matrix.md with:
+      - Intake migration status (mock → real API)
+      - SignalR expansion (inbox, sprints, timeline)
+      - Rate limiter application status
+      Update docs/project-ssot.md with current state.
+    wave: 7
+    agent: gem-documentation-writer
+    prototype: false
+    covers: []
+    priority: medium
+    status: pending
+    flags: {}
+    dependencies: ["W6-INTAKE-API", "W6-SIGNALR", "W6-PERF-TUNING"]
+    conflicts_with: ["W7-DOCS-ARCH"]
+    context_files:
+      - path: docs/frontend-to-backend-integration-matrix.md
+        description: "Integration status matrix"
+      - path: docs/project-ssot.md
+        description: "Project source of truth"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Integration status must be documented for team alignment"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 2
+        estimated_lines: 100
+        focus_area: "docs/"
+        verification:
+          - "Integration matrix reflects actual state"
+          - "SSOT is current"
+        acceptance_criteria:
+          - "Integration matrix updated with intake, SignalR, rate limiters"
+          - "project-ssot.md reflects current state"
+        failure_modes:
+          - scenario: "Integration tasks not fully completed"
+            likelihood: low
+            impact: low
+            mitigation: "Mark in-progress items as such"
+        task_type: update
+        audience: developers
+        coverage_matrix:
+          - "API integration status"
+          - "Realtime event coverage"
+          - "Performance configuration"
+
+  - id: "W7-FINAL-VALIDATE"
+    title: "Final comprehensive validation: lint, typecheck, build, backend tests"
+    description: |
+      Final validation after all waves:
+      - npm run lint
+      - npm run typecheck
+      - npm run build
+      - dotnet test backend/LinearPrecision.sln --no-restore
+      Generate summary report of all acceptance criteria status.
+    wave: 7
+    agent: gem-reviewer
+    prototype: false
+    covers: ["Frontend lint, typecheck, build all pass", "Backend 78/78 tests still pass"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W7-ESLINT", "W7-DOCS-ARCH", "W7-DOCS-INTEGRATION"]
+    conflicts_with: []
+    context_files: []
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Final gate — all acceptance criteria must be verified"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 0
+        estimated_lines: 0
+        focus_area: "Full validation"
+        verification:
+          - "All build commands exit 0"
+          - "All PRD acceptance criteria verified"
+        acceptance_criteria:
+          - "lint, typecheck, build, dotnet test all pass"
+          - "Every PRD acceptance criterion verified"
+        failure_modes:
+          - scenario: "ESLint new rules create late-stage failures"
+            likelihood: medium
+            impact: medium
+            mitigation: "ESLint fixes were applied in W7-ESLINT; only regressions would appear here"
+        requires_review: true
+        review_depth: full
+        review_security_sensitive: true
+
+  - id: "W7-SECURITY-AUDIT"
+    title: "Final security review of all hardening changes"
+    description: |
+      Review all security changes across waves 1-5:
+      - Verify no secrets remaining in source
+      - Verify all security headers present
+      - Verify rate limiters applied
+      - Verify middleware auth protection
+      - Verify CSRF, user enumeration, error exposure fixes
+      Produce security posture summary.
+    wave: 7
+    agent: gem-reviewer
+    prototype: false
+    covers: ["All security headers present in responses", "No hardcoded secrets in source", "Rate limiters applied to auth endpoints"]
+    priority: high
+    status: pending
+    flags: {}
+    dependencies: ["W5-SECURITY-MEDIUM", "W3-RATE-LIMITERS", "W2-SECURITY-HEADERS-NEXT", "W2-SECURITY-HEADERS-BACKEND", "W1-SECRETS"]
+    conflicts_with: []
+    context_files:
+      - path: next.config.ts
+        description: "Security headers"
+      - path: backend/src/LinearPrecision.Api/Program.cs
+        description: "Backend security middleware"
+      - path: middleware.ts
+        description: "Auth route protection"
+    planning_pass: 1
+    planning_history:
+      - pass: 1
+        reason: "Comprehensive security audit of all changes before signoff"
+        timestamp: "2026-04-16"
+        estimated_effort: small
+        estimated_files: 0
+        estimated_lines: 0
+        focus_area: "Security posture"
+        verification:
+          - "No secrets in source (grep verification)"
+          - "Security headers in curl responses"
+          - "Rate limiters in endpoint configuration"
+        acceptance_criteria:
+          - "Security audit passes all OWASP checks from initial research"
+          - "No regressions from initial security posture"
+        failure_modes:
+          - scenario: "Missed security issue in implementation"
+            likelihood: low
+            impact: high
+            mitigation: "Flag for immediate remediation before marking plan complete"
+        requires_review: true
+        review_depth: full
+        review_security_sensitive: true
+
+planning_pass: 1
+planning_history:
+  - pass: 1
+    reason: "Initial plan creation — Variant C (Impact-First ordering)"
+    timestamp: "2026-04-16"

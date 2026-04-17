@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import { Plus, Briefcase, FileText, Target, Calendar, Zap } from "lucide-react";
+import { distance, transitions, press } from "@/lib/motion";
 
 export type QuickActionType = "new-task" | "new-project" | "new-doc" | "new-goal" | "new-event";
 
@@ -20,17 +21,18 @@ interface QuickActionsProps {
 export function QuickActions({ onAction }: QuickActionsProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: distance.md }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      transition={transitions.base}
       className="flex items-center gap-2 overflow-x-auto pb-1"
     >
       <Zap className="size-3.5 text-slate-600 flex-shrink-0" />
       <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider flex-shrink-0">Quick</span>
       <div className="flex gap-2">
         {actions.map((action) => (
-          <button
+          <motion.button
             key={action.label}
+            whileTap={press.firm}
             onClick={() => onAction?.(action.actionType)}
             className={`flex items-center gap-1.5 px-2.5 py-1 border rounded-sm text-[11px] font-medium transition-colors hover:brightness-110 flex-shrink-0 ${action.color}`}
           >
@@ -39,7 +41,7 @@ export function QuickActions({ onAction }: QuickActionsProps) {
             {action.shortcut && (
               <kbd className="text-[9px] font-mono opacity-50 ml-1">{action.shortcut}</kbd>
             )}
-          </button>
+          </motion.button>
         ))}
       </div>
     </motion.div>

@@ -1,7 +1,7 @@
 # API Integration Master Plan — Linear Precision PM SaaS
 
-> **Status:** Draft v1.0
-> **Last updated:** 2026-03-19
+> **Status:** Synced with current backend implementation
+> **Last updated:** 2026-04-11
 > **Owner:** Backend Architecture Team
 > **Related:** `backend-architecture-master-plan.md`, `auth-tenancy-rbac-plan.md`, `domain-model.md`
 
@@ -10,6 +10,8 @@
 ## 1. Overview
 
 This document defines the complete REST API surface for Linear Precision. It covers endpoint inventory, request/response conventions, pagination, filtering, rate limiting, versioning, error handling, and header requirements.
+
+> **Implementation note:** The baseline inventory below reflects the original P0-P3 spec. The current backend also exposes 16 additional routes documented in section 7.21, while the six magic-link/OAuth/2FA auth routes in section 7.1 remain deferred to P4+.
 
 **Design principles:**
 
@@ -249,7 +251,7 @@ Content-Type: application/problem+json
 
 ## 7. Complete Endpoint Inventory
 
-### 7.1 Identity Module (8 endpoints)
+### 7.1 Identity Module (10 endpoints)
 
 | # | Method | Path | Description | Auth | Rate Limit |
 |---|--------|------|-------------|------|------------|
@@ -264,6 +266,8 @@ Content-Type: application/problem+json
 | 9 | `POST` | `/api/v1/auth/2fa/enable` | Enable 2FA | Yes | `global` |
 | 10 | `POST` | `/api/v1/auth/2fa/verify` | Verify 2FA code during login | No | `auth` |
 
+> Current implementation also exposes `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password`; see section 7.21.
+
 ### 7.2 User Module (4 endpoints)
 
 | # | Method | Path | Description | Auth | Role |
@@ -272,6 +276,8 @@ Content-Type: application/problem+json
 | 12 | `PUT` | `/api/v1/users/me` | Update current user profile | Yes | Any |
 | 13 | `PUT` | `/api/v1/users/me/password` | Change password | Yes | Any |
 | 14 | `GET` | `/api/v1/users/me/workspaces` | List user's workspaces | Yes | Any |
+
+> Current implementation also exposes `PUT /api/v1/users/me/active-workspace`; see section 7.21.
 
 ### 7.3 Workspace Module (10 endpoints)
 
@@ -402,15 +408,18 @@ Content-Type: application/problem+json
 | 92 | `DELETE` | `/api/v1/automations/{id}` | Delete automation | Yes | Admin+ |
 | 93 | `GET` | `/api/v1/automations/{id}/logs` | View execution logs | Yes | Admin+ |
 
-### 7.13 Notifications Module (5 endpoints)
+### 7.13 Notifications Module (6 endpoints)
 
 | # | Method | Path | Description | Auth | Role |
 |---|--------|------|-------------|------|------|
 | 94 | `GET` | `/api/v1/notifications` | List notifications (paginated) | Yes | Any |
 | 95 | `PUT` | `/api/v1/notifications/{id}/read` | Mark notification read | Yes | Any |
-| 96 | `PUT` | `/api/v1/notifications/read-all` | Mark all read | Yes | Any |
-| 97 | `GET` | `/api/v1/notifications/preferences` | Get notification preferences | Yes | Any |
-| 98 | `PUT` | `/api/v1/notifications/preferences` | Update notification preferences | Yes | Any |
+| 96 | `PUT` | `/api/v1/notifications/{id}/archive` | Archive notification | Yes | Any |
+| 97 | `PUT` | `/api/v1/notifications/read-all` | Mark all read | Yes | Any |
+| 98 | `GET` | `/api/v1/notifications/preferences` | Get notification preferences | Yes | Any |
+| 99 | `PUT` | `/api/v1/notifications/preferences` | Update notification preferences | Yes | Any |
+
+> Current implementation also exposes `PUT /api/v1/notifications/{id}/archive`; see section 7.21.
 
 ### 7.14 Search Module (1 endpoint)
 
@@ -428,6 +437,8 @@ Content-Type: application/problem+json
 | 103 | `POST` | `/api/v1/billing/webhook` | Stripe webhook receiver | No | — |
 | 104 | `GET` | `/api/v1/billing/usage` | Get usage metrics | Yes | Admin+ |
 
+> Current implementation also exposes subscription CRUD, usage summary, and public plan lookup routes; see section 7.21.
+
 ### 7.16 AI Module (4 endpoints)
 
 | # | Method | Path | Description | Auth | Role |
@@ -436,6 +447,8 @@ Content-Type: application/problem+json
 | 106 | `POST` | `/api/v1/ai/conversations/{id}/messages` | Send message (triggers AI response) | Yes | Member+ |
 | 107 | `GET` | `/api/v1/ai/conversations` | List conversations | Yes | Member+ |
 | 108 | `GET` | `/api/v1/ai/conversations/{id}` | Get conversation with messages | Yes | Member+ |
+
+> Current implementation also exposes `DELETE /api/v1/ai/conversations/{id}`; see section 7.21.
 
 ### 7.17 Analytics Module (4 endpoints)
 
@@ -464,6 +477,8 @@ Content-Type: application/problem+json
 | 119 | `PUT` | `/api/v1/admin/feature-flags/{key}` | Toggle feature flag | Yes | Owner |
 | 120 | `GET` | `/api/v1/admin/workspace-stats` | Workspace usage statistics | Yes | Admin+ |
 
+> Current implementation uses `/api/v1/admin/audit-events` plus feature-flag create/delete routes; see section 7.21.
+
 ### 7.20 Health and Infrastructure (3 endpoints)
 
 | # | Method | Path | Description | Auth | Rate Limit |
@@ -474,12 +489,38 @@ Content-Type: application/problem+json
 
 ---
 
+### 7.21 Current Implementation Delta (16 routes)
+
+The backend currently exposes the following routes in addition to the baseline inventory above:
+
+| # | Method | Path | Description | Auth | Notes |
+|---|--------|------|-------------|------|-------|
+| 124 | `POST` | `/api/v1/auth/forgot-password` | Request password reset | No | Auth |
+| 125 | `POST` | `/api/v1/auth/reset-password` | Reset password | No | Auth |
+| 126 | `PUT` | `/api/v1/users/me/active-workspace` | Set active workspace | Yes | User module |
+| 127 | `PUT` | `/api/v1/notifications/{id}/archive` | Archive notification | Yes | Notifications |
+| 128 | `POST` | `/api/v1/billing/subscription` | Create subscription | Yes | Billing |
+| 129 | `PUT` | `/api/v1/billing/subscription` | Update subscription | Yes | Billing |
+| 130 | `DELETE` | `/api/v1/billing/subscription` | Cancel subscription | Yes | Billing |
+| 131 | `GET` | `/api/v1/billing/usage/summary` | Usage summary | Yes | Billing |
+| 132 | `GET` | `/api/v1/plans` | List plans | No | Public |
+| 133 | `GET` | `/api/v1/plans/{id}` | Get plan | No | Public |
+| 134 | `DELETE` | `/api/v1/ai/conversations/{id}` | Delete conversation | Yes | AI |
+| 135 | `GET` | `/api/v1/admin/audit-events` | List audit events | Yes | Admin |
+| 136 | `GET` | `/api/v1/admin/audit-events/{id}` | Get audit event | Yes | Admin |
+| 137 | `POST` | `/api/v1/admin/feature-flags` | Create feature flag | Yes | Admin |
+| 138 | `PUT` | `/api/v1/admin/feature-flags/{id}` | Update feature flag | Yes | Admin |
+| 139 | `DELETE` | `/api/v1/admin/feature-flags/{id}` | Delete feature flag | Yes | Admin |
+
+These routes bring the current codebase to 131 implemented endpoints. The six missing routes are the deferred magic-link/OAuth/2FA auth endpoints listed in section 7.1.
+
 ## 8. Endpoint Summary
 
 | Module | Endpoints | CRUD | Actions | Queries |
 |--------|-----------|------|---------|---------|
-| Identity/Auth | 10 | — | 10 | — |
-| User | 4 | 2 | 1 | 1 |
+| Identity/Auth | 12 | — | 12 | — |
+| User | 5 | 2 | 2 | 1 |
+| Plans | 2 | — | — | 2 |
 | Workspace | 10 | 5 | 2 | 3 |
 | Projects | 9 | 4 | 2 | 3 |
 | Tasks | 16 | 10 | 2 | 4 |
@@ -490,14 +531,16 @@ Content-Type: application/problem+json
 | TimeTracking | 6 | 3 | 2 | 1 |
 | Intake | 7 | 3 | 2 | 2 |
 | Automations | 5 | 3 | — | 2 |
-| Notifications | 5 | — | 3 | 2 |
+| Notifications | 6 | — | 4 | 2 |
 | Search | 1 | — | — | 1 |
-| Billing | 5 | — | 3 | 2 |
-| AI | 4 | 1 | 1 | 2 |
+| Billing | 11 | 4 | 3 | 4 |
+| AI | 5 | 2 | 1 | 2 |
 | Analytics | 4 | — | — | 4 |
 | Files | 4 | 1 | 2 | 1 |
-| Admin | 4 | — | 1 | 3 |
-| **Total** | **~120** | **~48** | **~35** | **~37** |
+| Admin | 7 | 1 | 2 | 4 |
+| **Total** | **~139** | **~57** | **~41** | **~41** |
+
+Current code implements 131 of the 139 listed routes; the eight missing routes are the six deferred magic-link/OAuth/2FA auth endpoints plus the two baseline admin path variants documented in section 7.19 and represented by their current implementations in section 7.21.
 
 ---
 

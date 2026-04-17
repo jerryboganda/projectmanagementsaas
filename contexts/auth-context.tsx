@@ -72,8 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const refreshed = await createApiClient().refresh();
-      return applySession(toPersistedSession(refreshed));
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8_000);
+      try {
+        const refreshed = await createApiClient().refresh({ signal: controller.signal });
+        return applySession(toPersistedSession(refreshed));
+      } finally {
+        clearTimeout(timeoutId);
+      }
     } catch {
       return applySession(null);
     }
@@ -84,9 +90,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     void (async () => {
       try {
-        const refreshed = await createApiClient().refresh();
-        if (isMounted) {
-          applySession(toPersistedSession(refreshed));
+        // Cap refresh at 8s so a hung/unreachable backend does not trap the
+        // user on the "Restoring your session" splash indefinitely.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8_000);
+        try {
+          const refreshed = await createApiClient().refresh({ signal: controller.signal });
+          if (isMounted) {
+            applySession(toPersistedSession(refreshed));
+          }
+        } finally {
+          clearTimeout(timeoutId);
         }
       } catch {
         if (isMounted) {

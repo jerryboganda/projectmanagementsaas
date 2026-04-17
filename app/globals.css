@@ -1,3 +1,15 @@
+/* Screen reader only utility (if not provided by Tailwind) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -24,4 +36,36 @@ body {
 }
 ::-webkit-scrollbar-thumb {
   background: #222222;
+}
+
+/* Focus management */
+*:focus-visible {
+  outline: 2px solid #1313ec;
+  outline-offset: 2px;
+}
+
+/* Skip link styling */
+.skip-link {
+  position: fixed;
+  top: -100%;
+  left: 0;
+  z-index: 9999;
+  padding: 0.75rem 1.5rem;
+  background: #1313ec;
+  color: white;
+  font-weight: 600;
+  transition: top 0.15s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

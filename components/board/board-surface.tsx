@@ -37,6 +37,8 @@ export function BoardSurface({ data, membersById, onDragEnd, selectedTaskId, onT
             {...provided.droppableProps}
             ref={provided.innerRef}
             className="flex gap-4 p-6 h-full overflow-x-auto overflow-y-hidden items-start"
+            aria-label="Board columns"
+            role="region"
           >
             {data.columnOrder.length === 0 && (
               <div className="flex flex-col items-center justify-center w-full h-full text-slate-500 gap-2">

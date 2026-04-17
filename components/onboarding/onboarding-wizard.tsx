@@ -335,14 +335,18 @@ export function OnboardingWizard() {
             onClick={close}
           />
 
-          {/* Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 40 }}
-            transition={{ type: "spring", damping: 26, stiffness: 280 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-neutral-surface border border-neutral-border rounded-xl shadow-2xl z-[201] overflow-hidden"
-          >
+          {/* Card — centered via flex wrapper to avoid Tailwind translate colliding with motion transforms */}
+          <div className="fixed inset-0 z-[201] flex items-center justify-center p-4 pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              transition={{ type: "spring", damping: 26, stiffness: 280 }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Welcome onboarding"
+              className="pointer-events-auto w-full max-w-lg max-h-[90vh] bg-neutral-surface border border-neutral-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
+            >
             {/* Progress bar */}
             <div className="h-1 w-full bg-white/5">
               <motion.div
@@ -363,14 +367,14 @@ export function OnboardingWizard() {
             </button>
 
             {/* Step indicator */}
-            <div className="pt-4 pb-1 text-center">
+            <div className="pt-4 pb-1 text-center flex-shrink-0">
               <span className="text-[11px] text-slate-500 font-medium tracking-wide uppercase">
                 Step {step + 1} of {TOTAL_STEPS}
               </span>
             </div>
 
             {/* Animated step content */}
-            <div className="relative min-h-[320px] overflow-hidden">
+            <div className="relative flex-1 min-h-0 overflow-y-auto">
               <AnimatePresence mode="wait" custom={direction}>
                 <motion.div
                   key={step}
@@ -388,7 +392,7 @@ export function OnboardingWizard() {
             </div>
 
             {/* Footer nav */}
-            <div className="flex items-center justify-between px-5 py-4 border-t border-neutral-border">
+            <div className="flex items-center justify-between px-5 py-4 border-t border-neutral-border flex-shrink-0">
               <button
                 onClick={prev}
                 disabled={step === 0}
@@ -423,6 +427,7 @@ export function OnboardingWizard() {
               )}
             </div>
           </motion.div>
+        </div>
         </>
       )}
     </AnimatePresence>

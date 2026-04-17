@@ -184,6 +184,7 @@ export function PortfolioDetail({
   };
 
   const handleDelete = async () => {
+    // eslint-disable-next-line no-alert
     if (!window.confirm("Delete this goal? This action cannot be undone.")) {
       return;
     }

@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { MessageSquare, CheckCircle2, AlertTriangle, UserPlus } from "lucide-react";
 import type { DashboardActivityItem } from "@/lib/dashboard/types";
+import { distance, stagger, transitions } from "@/lib/motion";
 
 const fallbackActivities: DashboardActivityItem[] = [
   {
@@ -96,9 +97,9 @@ export function RecentActivity({ activities, isLoading = false }: RecentActivity
           return (
           <motion.div 
             key={activity.id}
-            initial={{ opacity: 0, x: 10 }}
+            initial={{ opacity: 0, x: distance.md }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: 0.4 + i * 0.1 }}
+            transition={{ ...transitions.base, delay: 0.12 + i * stagger.relaxed }}
             className="flex gap-3 group"
           >
             <div className={`size-6 rounded-sm flex-shrink-0 ${config.iconBg} flex items-center justify-center mt-0.5`}>

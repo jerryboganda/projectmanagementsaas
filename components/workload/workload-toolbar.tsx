@@ -3,8 +3,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { RefreshCcw, Search, Briefcase, SlidersHorizontal, Download, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { WorkloadProjectOption, WorkloadTone } from "./data";
-import { getWorkloadToneLabel, getWorkloadToneClasses } from "./data";
+import { getWorkloadToneLabel, getWorkloadToneClasses, type WorkloadProjectOption, type WorkloadTone } from "./data";
 
 type WorkloadLevelFilter = WorkloadTone | "all";
 

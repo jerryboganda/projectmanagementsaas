@@ -127,6 +127,7 @@ export function Header({
             onSearch?.("");
           }}
           className="hidden h-8 w-64 items-center gap-2 rounded-sm border border-neutral-border bg-transparent px-3 text-slate-500 transition-colors hover:border-slate-600 hover:text-slate-400 md:flex"
+          aria-label="Search"
         >
           <Search className="size-[14px]" />
           <span className="flex-1 text-left text-[13px]">{searchPlaceholder}</span>
@@ -175,6 +176,8 @@ export function Header({
           <button
             onClick={() => setProfileOpen((open) => !open)}
             className="flex items-center gap-1.5 rounded-sm p-0.5 transition-colors hover:bg-white/5"
+            aria-label="User menu"
+            aria-expanded={profileOpen}
           >
             <div className="grid size-8 flex-shrink-0 place-items-center overflow-hidden rounded-sm border border-neutral-border bg-slate-800">
               {session?.user.avatarUrl ? (
@@ -201,7 +204,7 @@ export function Header({
           </button>
 
           {profileOpen ? (
-            <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-sm border border-neutral-border bg-neutral-surface shadow-xl">
+            <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-sm border border-neutral-border bg-neutral-surface shadow-xl" role="menu">
               <div className="border-b border-neutral-border px-3 py-2.5">
                 <p className="text-[13px] font-medium text-slate-200">{userName}</p>
                 <p className="text-[11px] text-slate-500">{userEmail}</p>
@@ -214,6 +217,7 @@ export function Header({
                     router.push("/settings");
                   }}
                   className="flex w-full items-center gap-2.5 px-3 py-1.5 text-[13px] text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200"
+                  role="menuitem"
                 >
                   <User className="size-[14px]" />
                   Profile
@@ -224,6 +228,7 @@ export function Header({
                     router.push("/settings");
                   }}
                   className="flex w-full items-center gap-2.5 px-3 py-1.5 text-[13px] text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200"
+                  role="menuitem"
                 >
                   <Settings className="size-[14px]" />
                   Settings
@@ -237,6 +242,7 @@ export function Header({
                     void handleSignOut();
                   }}
                   className="flex w-full items-center gap-2.5 px-3 py-1.5 text-[13px] text-slate-400 transition-colors hover:bg-white/5 hover:text-red-400"
+                  role="menuitem"
                 >
                   <LogOut className="size-[14px]" />
                   Sign out

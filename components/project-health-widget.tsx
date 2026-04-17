@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { DashboardProjectHealthItem } from "@/lib/dashboard/types";
+import { distance, stagger, transitions, easing } from "@/lib/motion";
 
 const fallbackProjects: DashboardProjectHealthItem[] = [
   { name: "Core Platform", health: "On Track", progress: 72, tasks: "18/25" },
@@ -63,9 +64,9 @@ export function ProjectHealthWidget({ projects, isLoading = false }: ProjectHeal
         ) : items.map((project, i) => (
           <motion.div
             key={project.name}
-            initial={{ opacity: 0, x: 8 }}
+            initial={{ opacity: 0, x: distance.md }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: 0.3 + i * 0.05 }}
+            transition={{ ...transitions.base, delay: 0.1 + i * stagger.base }}
             className="px-4 py-3 hover:bg-white/[0.03] cursor-pointer transition-colors group"
           >
             <div className="flex items-center justify-between mb-1.5">
@@ -79,7 +80,7 @@ export function ProjectHealthWidget({ projects, isLoading = false }: ProjectHeal
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${project.progress}%` }}
-                  transition={{ duration: 0.8, delay: 0.4 + i * 0.1, ease: "easeOut" }}
+                  transition={{ duration: 0.8, delay: 0.2 + i * stagger.relaxed, ease: easing.standard }}
                   className={cn("h-full rounded-full", progressColors[project.health])}
                 />
               </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
@@ -46,6 +46,13 @@ export function CreateTaskModal({
   const [dueDate, setDueDate] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // Initialize projectId to first available project when modal opens or project list changes.
+  useEffect(() => {
+    if (isOpen && !projectId && projects.length > 0) {
+      setProjectId(projects[0].id);
+    }
+  }, [isOpen, projectId, projects]);
 
   const reset = () => {
     setTitle("");

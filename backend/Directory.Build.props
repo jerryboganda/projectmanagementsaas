@@ -7,5 +7,9 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- Worker publish pulls in Api's appsettings.json via project reference which
+         collides with Worker's own appsettings.json. Allow the SDK to pick one
+         instead of erroring out (NETSDK1152). -->
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 </Project>

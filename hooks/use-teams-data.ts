@@ -8,6 +8,7 @@ import type {
   SetTeamMembersRequest,
   TeamResponse,
   UpdateTeamRequest,
+  WorkspaceMemberResponse,
 } from "@/lib/api/contracts";
 
 function teamsQueryKey(workspaceId: string | null) {
@@ -16,6 +17,10 @@ function teamsQueryKey(workspaceId: string | null) {
 
 export function teamsListQueryKey(workspaceId: string | null) {
   return [...teamsQueryKey(workspaceId), "list"] as const;
+}
+
+function workspaceMembersForTeamsKey(workspaceId: string | null) {
+  return [...teamsQueryKey(workspaceId), "workspace-members"] as const;
 }
 
 export function useTeamsData() {
@@ -27,6 +32,13 @@ export function useTeamsData() {
     queryKey: teamsListQueryKey(activeWorkspaceId),
     queryFn: () => apiClient.listTeams(),
     enabled: !!activeWorkspaceId,
+  });
+
+  const workspaceMembersQuery = useQuery({
+    queryKey: workspaceMembersForTeamsKey(activeWorkspaceId),
+    queryFn: () => apiClient.listWorkspaceMembers(activeWorkspaceId!),
+    enabled: !!activeWorkspaceId,
+    staleTime: 30_000,
   });
 
   const invalidate = () =>
@@ -68,6 +80,7 @@ export function useTeamsData() {
 
   return {
     teams: (teamsQuery.data ?? []) as TeamResponse[],
+    workspaceMembers: (workspaceMembersQuery.data ?? []) as WorkspaceMemberResponse[],
     isLoading: teamsQuery.isLoading,
     isError: teamsQuery.isError,
     error: teamsQuery.error,

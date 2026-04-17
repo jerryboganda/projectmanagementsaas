@@ -80,6 +80,7 @@ function MemberAvatarStack({
 export function TeamsPanel() {
   const {
     teams,
+    workspaceMembers,
     isLoading,
     isError,
     error,
@@ -87,6 +88,7 @@ export function TeamsPanel() {
     createTeam,
     updateTeam,
     deleteTeam,
+    setTeamMembers,
     isMutating,
   } = useTeamsData();
 
@@ -101,6 +103,10 @@ export function TeamsPanel() {
   const [isCreating, setIsCreating] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [membersTeamId, setMembersTeamId] = useState<string | null>(null);
+  const [membersDraft, setMembersDraft] = useState<Set<string>>(new Set());
+  const [memberSearch, setMemberSearch] = useState('');
+  const [isSavingMembers, setIsSavingMembers] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -191,6 +197,62 @@ export function TeamsPanel() {
       setIsDeleting(false);
     }
   };
+
+  const openMembersModal = (team: TeamResponse) => {
+    setMembersTeamId(team.id);
+    setMembersDraft(new Set(team.members.map((m) => m.userId)));
+    setMemberSearch('');
+  };
+
+  const closeMembersModal = () => {
+    if (isSavingMembers) return;
+    setMembersTeamId(null);
+    setMembersDraft(new Set());
+    setMemberSearch('');
+  };
+
+  const toggleMemberDraft = (userId: string) => {
+    setMembersDraft((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const handleSaveMembers = async () => {
+    if (!membersTeamId) return;
+    setIsSavingMembers(true);
+    try {
+      await setTeamMembers({
+        teamId: membersTeamId,
+        input: { userIds: Array.from(membersDraft) },
+      });
+      flashMessage('Team members updated.');
+      setMembersTeamId(null);
+      setMembersDraft(new Set());
+      setMemberSearch('');
+    } catch (err) {
+      flashError(err instanceof Error ? err.message : 'Failed to update members.');
+    } finally {
+      setIsSavingMembers(false);
+    }
+  };
+
+  const filteredWorkspaceMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return workspaceMembers;
+    return workspaceMembers.filter(
+      (m) =>
+        (m.fullName ?? '').toLowerCase().includes(q) ||
+        (m.email ?? '').toLowerCase().includes(q),
+    );
+  }, [workspaceMembers, memberSearch]);
+
+  const membersBeingEditedTeam = membersTeamId
+    ? teams.find((t) => t.id === membersTeamId) ?? null
+    : null;
+
 
   return (
     <motion.div
@@ -353,6 +415,13 @@ export function TeamsPanel() {
                     </div>
                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
+                        onClick={() => openMembersModal(team)}
+                        className="rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
+                        title="Manage members"
+                      >
+                        <UsersRound className="size-3.5" />
+                      </button>
+                      <button
                         onClick={() => handleStartEdit(team)}
                         className="rounded-md p-1.5 text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors"
                         title="Edit team name"
@@ -377,12 +446,16 @@ export function TeamsPanel() {
               </p>
 
               {/* Members */}
-              <div className="flex items-center justify-between">
+              <button
+                onClick={() => openMembersModal(team)}
+                className="flex w-full items-center justify-between rounded-md px-1 py-1 -mx-1 text-left transition-colors hover:bg-white/[0.04]"
+                title="Manage members"
+              >
                 <MemberAvatarStack members={team.members} max={6} />
                 <span className="text-xs text-slate-500">
                   {team.memberCount} {team.memberCount === 1 ? 'member' : 'members'}
                 </span>
-              </div>
+              </button>
             </div>
           ))}
         </div>
@@ -501,8 +574,112 @@ export function TeamsPanel() {
         </div>
       </Modal>
 
+      {/* Manage Members Modal */}
+      <Modal
+        isOpen={!!membersTeamId}
+        onClose={closeMembersModal}
+        title={
+          membersBeingEditedTeam
+            ? `Manage members – ${membersBeingEditedTeam.name}`
+            : 'Manage members'
+        }
+        footer={
+          <>
+            <button
+              onClick={closeMembersModal}
+              disabled={isSavingMembers}
+              className="rounded-md border border-neutral-border bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-slate-100 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleSaveMembers()}
+              disabled={isSavingMembers}
+              className={cn(
+                'flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90',
+                isSavingMembers && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              {isSavingMembers ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Check className="size-4" />
+              )}
+              {isSavingMembers ? 'Saving…' : 'Save members'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-500" />
+            <input
+              type="text"
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+              placeholder="Search workspace members…"
+              className="w-full rounded-md border border-neutral-border bg-background-dark py-2 pl-9 pr-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+          </div>
+          <div className="text-xs text-slate-500">
+            {membersDraft.size} selected of {workspaceMembers.length} workspace member
+            {workspaceMembers.length === 1 ? '' : 's'}
+          </div>
+          <div className="max-h-[360px] overflow-y-auto rounded-md border border-neutral-border bg-background-dark/40">
+            {filteredWorkspaceMembers.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-slate-500">
+                {memberSearch
+                  ? 'No members match your search.'
+                  : 'No workspace members available.'}
+              </div>
+            ) : (
+              <ul className="divide-y divide-neutral-border/60">
+                {filteredWorkspaceMembers.map((m) => {
+                  const checked = membersDraft.has(m.userId);
+                  const name = m.fullName || m.email || 'Member';
+                  return (
+                    <li key={m.userId}>
+                      <label className="flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors hover:bg-white/[0.03]">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleMemberDraft(m.userId)}
+                          className="size-4 cursor-pointer rounded border-neutral-border bg-background-dark text-primary focus:ring-primary/50"
+                        />
+                        {m.avatarUrl ? (
+                          <Image
+                            src={m.avatarUrl}
+                            alt={name}
+                            width={28}
+                            height={28}
+                            className="size-7 rounded-full border border-neutral-border object-cover"
+                          />
+                        ) : (
+                          <div className="flex size-7 items-center justify-center rounded-full border border-neutral-border bg-primary/15 text-[10px] font-semibold text-primary">
+                            {initialsOf(name)}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-slate-200">{name}</div>
+                          {m.email && m.fullName && (
+                            <div className="truncate text-xs text-slate-500">{m.email}</div>
+                          )}
+                        </div>
+                        <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                          {m.role}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Modal>
+
       {/* Background activity indicator */}
-      {isMutating && !isCreating && !isSavingEdit && !isDeleting && (
+      {isMutating && !isCreating && !isSavingEdit && !isDeleting && !isSavingMembers && (
         <div className="pointer-events-none fixed bottom-6 right-6 flex items-center gap-2 rounded-md border border-neutral-border bg-neutral-surface px-3 py-2 text-xs text-slate-300 shadow-lg">
           <Loader2 className="size-3.5 animate-spin" />
           Saving…

@@ -217,8 +217,15 @@ function withQuery(
 
 async function parseResponse(response: Response) {
   const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    return response.json();
+  // ASP.NET Core ProblemDetails responses use `application/problem+json`.
+  // Accept any JSON-flavoured content type so validation error bodies
+  // (errors[], title, detail) are parsed as objects, not raw strings.
+  if (/\bjson\b/i.test(contentType)) {
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
   }
 
   const text = await response.text();

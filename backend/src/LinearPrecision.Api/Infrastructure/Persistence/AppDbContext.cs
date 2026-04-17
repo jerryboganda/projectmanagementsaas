@@ -24,6 +24,10 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
 
+    // ── Teams ──
+    public DbSet<Team> Teams => Set<Team>();
+    public DbSet<TeamMembership> TeamMemberships => Set<TeamMembership>();
+
     // ── Projects ──
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectFavorite> ProjectFavorites => Set<ProjectFavorite>();
@@ -146,6 +150,8 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
         ApplyTenantAndSoftDeleteFilter<Goal>(builder);
         ApplyTenantAndSoftDeleteFilter<Initiative>(builder);
         ApplyTenantAndSoftDeleteFilter<Document>(builder);
+        ApplyTenantAndSoftDeleteFilter<Team>(builder);
+        ApplyTenantFilter<TeamMembership>(builder);
 
         // ── Global soft-deletable entities (ISoftDeletable but NOT TenantEntity) ──
         ApplySoftDeleteFilter<Workspace>(builder);

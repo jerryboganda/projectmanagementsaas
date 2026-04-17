@@ -31,3 +31,5 @@ backend/**/obj/
 
 # Dev logs
 *.pid
+LinearPrecision-debug.apk
+MOBILE-APK-README.md

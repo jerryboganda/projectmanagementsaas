@@ -31,6 +31,7 @@ using LinearPrecision.Api.Modules.Sprints;
 using LinearPrecision.Api.Modules.Tasks;
 using LinearPrecision.Api.Modules.TimeTracking;
 using LinearPrecision.Api.Modules.Workspace;
+using LinearPrecision.Api.Modules.Teams;
 using LinearPrecision.Api.Hubs;
 using LinearPrecision.Shared.Contracts;
 using MediatR;
@@ -300,6 +301,7 @@ builder.Services.AddSignalR()
 
 builder.Services.AddIdentityModule();
 builder.Services.AddWorkspaceModule();
+builder.Services.AddTeamsModule();
 builder.Services.AddProjectsModule();
 builder.Services.AddTasksModule();
 builder.Services.AddGoalsModule();
@@ -372,6 +374,7 @@ app.MapControllers();
 // Module endpoints
 app.MapIdentityEndpoints();
 app.MapWorkspaceEndpoints();
+app.MapTeamsEndpoints();
 app.MapProjectsEndpoints();
 app.MapTasksEndpoints();
 app.MapGoalsEndpoints();

@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   Check,
   Edit3,
-  Info,
   Loader2,
   Plus,
   Search,
@@ -18,84 +17,26 @@ import {
 import { cn } from '@/lib/utils';
 import { Modal } from '@/components/ui/modal';
 import { FormField } from '@/components/ui/form-field';
+import { useTeamsData } from '@/hooks/use-teams-data';
+import type { TeamMemberResponse, TeamResponse } from '@/lib/api/contracts';
 
-interface TeamMember {
-  id: string;
-  name: string;
-  initials: string;
-  avatarUrl?: string;
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('');
 }
 
-interface Team {
-  id: string;
-  name: string;
-  description: string;
-  members: TeamMember[];
-}
-
-const INITIAL_TEAMS: Team[] = [
-  {
-    id: 't1',
-    name: 'Engineering',
-    description: 'Core platform and product engineering',
-    members: [
-      { id: 'm1', name: 'Alex Chen', initials: 'AC', avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026024d' },
-      { id: 'm2', name: 'Sarah Miller', initials: 'SM', avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d' },
-      { id: 'm3', name: 'James Wilson', initials: 'JW' },
-      { id: 'm4', name: 'Emily Davis', initials: 'ED' },
-      { id: 'm5', name: 'Michael Brown', initials: 'MB' },
-      { id: 'm6', name: 'Laura Martinez', initials: 'LM' },
-      { id: 'm7', name: 'David Kim', initials: 'DK' },
-      { id: 'm8', name: 'Nina Patel', initials: 'NP' },
-      { id: 'm9', name: 'Chris Taylor', initials: 'CT' },
-      { id: 'm10', name: 'Julia Santos', initials: 'JS' },
-      { id: 'm11', name: 'Ryan Lee', initials: 'RL' },
-      { id: 'm12', name: 'Priya Gupta', initials: 'PG' },
-    ],
-  },
-  {
-    id: 't2',
-    name: 'Design',
-    description: 'Product design and user research',
-    members: [
-      { id: 'm13', name: 'Olivia Wong', initials: 'OW', avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026604d' },
-      { id: 'm14', name: 'Marco Rossi', initials: 'MR' },
-      { id: 'm15', name: 'Ava Thompson', initials: 'AT' },
-      { id: 'm16', name: 'Leo Nakamura', initials: 'LN' },
-    ],
-  },
-  {
-    id: 't3',
-    name: 'Product',
-    description: 'Product management, roadmap planning, and customer insights',
-    members: [
-      { id: 'm17', name: 'Sophie Bernard', initials: 'SB', avatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026804d' },
-      { id: 'm18', name: 'Daniel Park', initials: 'DP' },
-      { id: 'm19', name: 'Rachel Green', initials: 'RG' },
-    ],
-  },
-  {
-    id: 't4',
-    name: 'Marketing',
-    description: 'Growth, content, and product marketing',
-    members: [
-      { id: 'm20', name: 'Tyler Scott', initials: 'TS' },
-      { id: 'm21', name: 'Hannah Clark', initials: 'HC' },
-      { id: 'm22', name: 'Jason Adams', initials: 'JA' },
-      { id: 'm23', name: 'Megan White', initials: 'MW' },
-      { id: 'm24', name: 'Kevin Dunn', initials: 'KD' },
-      { id: 'm25', name: 'Zoe Blake', initials: 'ZB' },
-    ],
-  },
-];
-
-function MemberAvatar({ member }: { member: TeamMember }) {
+function MemberAvatar({ member }: { member: TeamMemberResponse }) {
+  const name = member.fullName || member.email || 'Member';
   if (member.avatarUrl) {
     return (
       <Image
         src={member.avatarUrl}
-        alt={member.name}
-        title={member.name}
+        alt={name}
+        title={name}
         width={28}
         height={28}
         className="size-7 rounded-full border border-neutral-border object-cover"
@@ -104,22 +45,28 @@ function MemberAvatar({ member }: { member: TeamMember }) {
   }
   return (
     <div
-      title={member.name}
+      title={name}
       className="flex size-7 items-center justify-center rounded-full border border-neutral-border bg-primary/15 text-[10px] font-semibold text-primary"
     >
-      {member.initials}
+      {initialsOf(name)}
     </div>
   );
 }
 
-function MemberAvatarStack({ members, max = 5 }: { members: TeamMember[]; max?: number }) {
+function MemberAvatarStack({
+  members,
+  max = 5,
+}: {
+  members: TeamMemberResponse[];
+  max?: number;
+}) {
   const visible = members.slice(0, max);
   const remaining = members.length - max;
 
   return (
     <div className="flex items-center -space-x-2">
       {visible.map((member) => (
-        <MemberAvatar key={member.id} member={member} />
+        <MemberAvatar key={member.userId} member={member} />
       ))}
       {remaining > 0 && (
         <div className="flex size-7 items-center justify-center rounded-full border border-neutral-border bg-neutral-surface text-[10px] font-medium text-slate-400">
@@ -131,16 +78,41 @@ function MemberAvatarStack({ members, max = 5 }: { members: TeamMember[]; max?: 
 }
 
 export function TeamsPanel() {
-  const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
+  const {
+    teams,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    createTeam,
+    updateTeam,
+    deleteTeam,
+    isMutating,
+  } = useTeamsData();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamDescription, setNewTeamDescription] = useState('');
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [editingDescription, setEditingDescription] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const flashMessage = (msg: string) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(null), 4000);
+  };
+
+  const flashError = (msg: string) => {
+    setErrorMessage(msg);
+    setTimeout(() => setErrorMessage(null), 6000);
+  };
 
   const filteredTeams = useMemo(() => {
     if (!searchQuery.trim()) return teams;
@@ -148,56 +120,76 @@ export function TeamsPanel() {
     return teams.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q)
+        (t.description ?? '').toLowerCase().includes(q),
     );
   }, [teams, searchQuery]);
 
   const handleCreate = async () => {
     if (!newTeamName.trim()) return;
     setIsCreating(true);
-    await new Promise((r) => setTimeout(r, 600));
-    const newTeam: Team = {
-      id: `t-${Date.now()}`,
-      name: newTeamName.trim(),
-      description: newTeamDescription.trim(),
-      members: [],
-    };
-    setTeams((prev) => [...prev, newTeam]);
-    setNewTeamName('');
-    setNewTeamDescription('');
-    setCreateOpen(false);
-    setIsCreating(false);
-    setMessage(`Team "${newTeam.name}" created.`);
-    setTimeout(() => setMessage(null), 4000);
+    try {
+      const created = await createTeam({
+        name: newTeamName.trim(),
+        description: newTeamDescription.trim() || null,
+      });
+      setNewTeamName('');
+      setNewTeamDescription('');
+      setCreateOpen(false);
+      flashMessage(`Team "${created.name}" created.`);
+    } catch (err) {
+      flashError(err instanceof Error ? err.message : 'Failed to create team.');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
-  const handleStartEdit = (team: Team) => {
+  const handleStartEdit = (team: TeamResponse) => {
     setEditingTeamId(team.id);
     setEditingName(team.name);
+    setEditingDescription(team.description ?? '');
   };
 
-  const handleSaveEdit = (teamId: string) => {
+  const handleSaveEdit = async (team: TeamResponse) => {
     if (!editingName.trim()) return;
-    setTeams((prev) =>
-      prev.map((t) => (t.id === teamId ? { ...t, name: editingName.trim() } : t))
-    );
-    setEditingTeamId(null);
-    setEditingName('');
-    setMessage('Team name updated.');
-    setTimeout(() => setMessage(null), 4000);
+    setIsSavingEdit(true);
+    try {
+      await updateTeam({
+        teamId: team.id,
+        input: {
+          name: editingName.trim(),
+          description: editingDescription.trim() || null,
+          color: team.color ?? null,
+        },
+      });
+      setEditingTeamId(null);
+      setEditingName('');
+      setEditingDescription('');
+      flashMessage('Team updated.');
+    } catch (err) {
+      flashError(err instanceof Error ? err.message : 'Failed to update team.');
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const handleCancelEdit = () => {
     setEditingTeamId(null);
     setEditingName('');
+    setEditingDescription('');
   };
 
-  const handleDelete = (teamId: string) => {
+  const handleDelete = async (teamId: string) => {
     const team = teams.find((t) => t.id === teamId);
-    setTeams((prev) => prev.filter((t) => t.id !== teamId));
-    setDeleteConfirmId(null);
-    setMessage(`Team "${team?.name}" deleted.`);
-    setTimeout(() => setMessage(null), 4000);
+    setIsDeleting(true);
+    try {
+      await deleteTeam(teamId);
+      setDeleteConfirmId(null);
+      flashMessage(`Team "${team?.name ?? ''}" deleted.`);
+    } catch (err) {
+      flashError(err instanceof Error ? err.message : 'Failed to delete team.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -225,14 +217,6 @@ export function TeamsPanel() {
         </button>
       </div>
 
-      {/* Local-only banner */}
-      <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
-        <Info className="mt-0.5 size-4 shrink-0 text-amber-400" />
-        <p className="text-sm text-amber-200">
-          Teams data is saved locally until the backend contract ships.
-        </p>
-      </div>
-
       {/* Success message */}
       <AnimatePresence>
         {message && (
@@ -244,6 +228,21 @@ export function TeamsPanel() {
           >
             <Check className="size-4" />
             {message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Error message */}
+      <AnimatePresence>
+        {errorMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mb-6 flex items-center gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-300"
+          >
+            <AlertTriangle className="size-4" />
+            {errorMessage}
           </motion.div>
         )}
       </AnimatePresence>
@@ -262,8 +261,26 @@ export function TeamsPanel() {
         </div>
       </div>
 
-      {/* Teams Grid */}
-      {filteredTeams.length === 0 ? (
+      {/* Loading / Error / Empty / Grid */}
+      {isLoading ? (
+        <div className="rounded-xl border border-dashed border-neutral-border bg-neutral-surface/20 px-6 py-14 text-center">
+          <Loader2 className="mx-auto mb-3 size-8 animate-spin text-slate-500" />
+          <p className="text-sm font-medium text-slate-400">Loading teams…</p>
+        </div>
+      ) : isError ? (
+        <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 px-6 py-10 text-center">
+          <AlertTriangle className="mx-auto mb-3 size-8 text-rose-400" />
+          <p className="text-sm font-medium text-rose-300">
+            {error instanceof Error ? error.message : 'Failed to load teams.'}
+          </p>
+          <button
+            onClick={() => void refetch()}
+            className="mt-4 inline-flex items-center gap-2 rounded-md border border-neutral-border bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/[0.08]"
+          >
+            Retry
+          </button>
+        </div>
+      ) : filteredTeams.length === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-border bg-neutral-surface/20 px-6 py-14 text-center">
           <UsersRound className="mx-auto mb-3 size-8 text-slate-600" />
           <p className="text-sm font-medium text-slate-400">
@@ -300,18 +317,23 @@ export function TeamsPanel() {
                       value={editingName}
                       onChange={(e) => setEditingName(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveEdit(team.id);
+                        if (e.key === 'Enter') void handleSaveEdit(team);
                         if (e.key === 'Escape') handleCancelEdit();
                       }}
                       autoFocus
                       className="flex-1 rounded-md border border-primary/50 bg-background-dark px-2 py-1 text-sm font-semibold text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary/50"
                     />
                     <button
-                      onClick={() => handleSaveEdit(team.id)}
-                      className="rounded-md p-1 text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                      onClick={() => void handleSaveEdit(team)}
+                      disabled={isSavingEdit}
+                      className="rounded-md p-1 text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
                       title="Save"
                     >
-                      <Check className="size-4" />
+                      {isSavingEdit ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Check className="size-4" />
+                      )}
                     </button>
                     <button
                       onClick={handleCancelEdit}
@@ -350,13 +372,15 @@ export function TeamsPanel() {
               </div>
 
               {/* Description */}
-              <p className="mb-4 text-xs text-slate-500 leading-relaxed">{team.description || 'No description'}</p>
+              <p className="mb-4 text-xs text-slate-500 leading-relaxed">
+                {team.description || 'No description'}
+              </p>
 
               {/* Members */}
               <div className="flex items-center justify-between">
                 <MemberAvatarStack members={team.members} max={6} />
                 <span className="text-xs text-slate-500">
-                  {team.members.length} {team.members.length === 1 ? 'member' : 'members'}
+                  {team.memberCount} {team.memberCount === 1 ? 'member' : 'members'}
                 </span>
               </div>
             </div>
@@ -368,6 +392,7 @@ export function TeamsPanel() {
       <Modal
         isOpen={createOpen}
         onClose={() => {
+          if (isCreating) return;
           setCreateOpen(false);
           setNewTeamName('');
           setNewTeamDescription('');
@@ -381,7 +406,8 @@ export function TeamsPanel() {
                 setNewTeamName('');
                 setNewTeamDescription('');
               }}
-              className="rounded-md border border-neutral-border bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-slate-100"
+              disabled={isCreating}
+              className="rounded-md border border-neutral-border bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-slate-100 disabled:opacity-50"
             >
               Cancel
             </button>
@@ -390,7 +416,7 @@ export function TeamsPanel() {
               disabled={!newTeamName.trim() || isCreating}
               className={cn(
                 'flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90',
-                (!newTeamName.trim() || isCreating) && 'cursor-not-allowed opacity-60'
+                (!newTeamName.trim() || isCreating) && 'cursor-not-allowed opacity-60',
               )}
             >
               {isCreating ? (
@@ -416,7 +442,9 @@ export function TeamsPanel() {
             label="Description"
             placeholder="What does this team focus on?"
             value={newTeamDescription}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewTeamDescription(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+              setNewTeamDescription(e.target.value)
+            }
           />
         </div>
       </Modal>
@@ -424,23 +452,32 @@ export function TeamsPanel() {
       {/* Delete Confirmation Modal */}
       <Modal
         isOpen={!!deleteConfirmId}
-        onClose={() => setDeleteConfirmId(null)}
+        onClose={() => {
+          if (isDeleting) return;
+          setDeleteConfirmId(null);
+        }}
         title="Delete Team"
         size="sm"
         footer={
           <>
             <button
               onClick={() => setDeleteConfirmId(null)}
-              className="rounded-md border border-neutral-border bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-slate-100"
+              disabled={isDeleting}
+              className="rounded-md border border-neutral-border bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-slate-100 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
-              onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
-              className="flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-300 transition-colors hover:bg-rose-500/20"
+              onClick={() => deleteConfirmId && void handleDelete(deleteConfirmId)}
+              disabled={isDeleting}
+              className="flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-300 transition-colors hover:bg-rose-500/20 disabled:opacity-60"
             >
-              <Trash2 className="size-4" />
-              Delete Team
+              {isDeleting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
+              {isDeleting ? 'Deleting…' : 'Delete Team'}
             </button>
           </>
         }
@@ -452,7 +489,10 @@ export function TeamsPanel() {
           <div>
             <p className="text-sm text-slate-200">
               Are you sure you want to delete{' '}
-              <span className="font-semibold">{teams.find((t) => t.id === deleteConfirmId)?.name}</span>?
+              <span className="font-semibold">
+                {teams.find((t) => t.id === deleteConfirmId)?.name}
+              </span>
+              ?
             </p>
             <p className="mt-2 text-xs text-slate-500">
               This action cannot be undone. All team associations will be removed.
@@ -460,6 +500,14 @@ export function TeamsPanel() {
           </div>
         </div>
       </Modal>
+
+      {/* Background activity indicator */}
+      {isMutating && !isCreating && !isSavingEdit && !isDeleting && (
+        <div className="pointer-events-none fixed bottom-6 right-6 flex items-center gap-2 rounded-md border border-neutral-border bg-neutral-surface px-3 py-2 text-xs text-slate-300 shadow-lg">
+          <Loader2 className="size-3.5 animate-spin" />
+          Saving…
+        </div>
+      )}
     </motion.div>
   );
 }

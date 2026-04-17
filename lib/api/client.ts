@@ -63,6 +63,10 @@ import {
   type WorkspaceSettingsResponse,
   type StartTimerRequest,
   type SubmitIntakeRequest,
+  type TeamResponse,
+  type CreateTeamRequest,
+  type UpdateTeamRequest,
+  type SetTeamMembersRequest,
 } from "@/lib/api/contracts";
 import { getRuntimeConfig, WORKSPACE_HEADER } from "@/lib/runtime/runtime-config";
 import { uploadFileToPresignedUrl } from "@/lib/api/presigned-upload";
@@ -818,6 +822,50 @@ export class LinearPrecisionApiClient {
     return this.request<{ id: string }>(`/api/v1/workspaces/${workspaceId}/invitations`, {
       method: "POST",
       body: input,
+    });
+  }
+
+  // ── Teams ──
+  listTeams() {
+    return this.request<TeamResponse[]>("/api/v1/teams");
+  }
+
+  createTeam(input: CreateTeamRequest) {
+    return this.request<TeamResponse>("/api/v1/teams", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  updateTeam(teamId: string, input: UpdateTeamRequest) {
+    return this.request<TeamResponse>(`/api/v1/teams/${teamId}`, {
+      method: "PUT",
+      body: input,
+    });
+  }
+
+  deleteTeam(teamId: string) {
+    return this.request<void>(`/api/v1/teams/${teamId}`, {
+      method: "DELETE",
+    });
+  }
+
+  setTeamMembers(teamId: string, input: SetTeamMembersRequest) {
+    return this.request<TeamResponse>(`/api/v1/teams/${teamId}/members`, {
+      method: "PUT",
+      body: input,
+    });
+  }
+
+  addTeamMember(teamId: string, userId: string) {
+    return this.request<TeamResponse>(`/api/v1/teams/${teamId}/members/${userId}`, {
+      method: "POST",
+    });
+  }
+
+  removeTeamMember(teamId: string, userId: string) {
+    return this.request<TeamResponse>(`/api/v1/teams/${teamId}/members/${userId}`, {
+      method: "DELETE",
     });
   }
 

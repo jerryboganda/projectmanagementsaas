@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
@@ -47,12 +47,9 @@ export function CreateTaskModal({
   const [tagsInput, setTagsInput] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize projectId to first available project when modal opens or project list changes.
-  useEffect(() => {
-    if (isOpen && !projectId && projects.length > 0) {
-      setProjectId(projects[0].id);
-    }
-  }, [isOpen, projectId, projects]);
+  // Derive effective projectId: user's selection if any, otherwise the first project.
+  // Avoids "setState in useEffect" anti-pattern while still defaulting correctly.
+  const effectiveProjectId = projectId || projects[0]?.id || "";
 
   const reset = () => {
     setTitle("");
@@ -79,13 +76,13 @@ export function CreateTaskModal({
       return;
     }
 
-    if (!projectId) {
+    if (!effectiveProjectId) {
       setError("A project is required because tasks are persisted through the backend.");
       return;
     }
 
     await onCreateTask({
-      projectId,
+      projectId: effectiveProjectId,
       title: title.trim(),
       description: description.trim() || undefined,
       status,
@@ -177,7 +174,7 @@ export function CreateTaskModal({
           <FormField
             as="select"
             label="Project"
-            value={projectId}
+            value={effectiveProjectId}
             onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setProjectId(event.target.value)}
           >
             {projects.map((project) => (

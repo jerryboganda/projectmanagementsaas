@@ -20,7 +20,6 @@ import {
   ListTodo,
   Plus,
   CheckSquare,
-  TrendingUp,
   User,
   type LucideIcon,
 } from 'lucide-react';
@@ -28,11 +27,8 @@ import { cn } from '@/lib/utils';
 import { overlayVariants, scalePopVariants, transitions } from '@/lib/motion';
 import { useAuth } from '@/contexts/auth-context';
 import { useWorkspace } from '@/contexts/workspace-context';
-import { useDocumentsData } from '@/hooks/use-documents-data';
 import type {
-  GoalResponse,
-  ProjectResponse,
-  TaskResponse,
+  SearchResultItem,
   WorkspaceMemberResponse,
 } from '@/lib/api/contracts';
 
@@ -103,6 +99,17 @@ const defaultActions: Omit<CommandItem, 'onSelect'>[] = [
 
 const MAX_PER_GROUP = 5;
 
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => clearTimeout(timeoutId);
+  }, [value, delayMs]);
+
+  return debouncedValue;
+}
+
 function fuzzyMatch(query: string, text: string): boolean {
   const q = query.toLowerCase();
   const t = text.toLowerCase();
@@ -120,35 +127,14 @@ function matchesAny(query: string, ...fields: (string | undefined)[]): boolean {
   return false;
 }
 
-const STATUS_DOT_COLORS: Record<string, string> = {
-  Backlog: 'bg-slate-500',
-  Todo: 'bg-slate-500',
-  InProgress: 'bg-blue-500',
-  InReview: 'bg-amber-500',
-  Done: 'bg-emerald-500',
-  Cancelled: 'bg-rose-500',
-};
-
-const PROJECT_STATUS_DOT_COLORS: Record<string, string> = {
-  Active: 'bg-emerald-500',
-  Paused: 'bg-amber-500',
-  Completed: 'bg-blue-500',
-  Archived: 'bg-slate-500',
-};
-
-const GOAL_DOT_COLORS: Record<string, string> = {
-  OnTrack: 'bg-emerald-500',
-  AtRisk: 'bg-amber-500',
-  OffTrack: 'bg-red-500',
-  Completed: 'bg-emerald-400',
-  Cancelled: 'bg-slate-500',
-};
-
-const INITIATIVE_DOT_COLORS: Record<string, string> = {
-  Planned: 'bg-slate-500',
-  InProgress: 'bg-blue-500',
-  Completed: 'bg-emerald-500',
-  Cancelled: 'bg-amber-500',
+const SEARCH_ENTITY_CONFIG: Record<
+  string,
+  { icon: LucideIcon; group: ResultGroup; href: string; dotColor: string }
+> = {
+  task: { icon: CheckSquare, group: 'Tasks', href: '/board', dotColor: 'bg-blue-500' },
+  project: { icon: Briefcase, group: 'Projects', href: '/projects', dotColor: 'bg-emerald-500' },
+  goal: { icon: Target, group: 'Goals', href: '/goals', dotColor: 'bg-amber-500' },
+  document: { icon: FileText, group: 'Docs', href: '/docs', dotColor: 'bg-slate-500' },
 };
 
 /** Ordered group rendering */
@@ -183,6 +169,28 @@ function getInitials(name: string): string {
     .join('');
 }
 
+function toWorkspaceSearchCommand(
+  result: SearchResultItem,
+  onNavigate: CommandPaletteProps['onNavigate'],
+  onClose: () => void,
+): CommandItem | null {
+  const config = SEARCH_ENTITY_CONFIG[result.entityType.toLowerCase()];
+  if (!config) return null;
+
+  return {
+    id: `${result.entityType}-${result.entityId}`,
+    icon: config.icon,
+    label: result.title,
+    group: config.group,
+    subtitle: result.snippet ?? undefined,
+    dotColor: config.dotColor,
+    onSelect: () => {
+      onNavigate?.(config.href);
+      onClose();
+    },
+  };
+}
+
 // ============================================================
 // Component
 // ============================================================
@@ -199,38 +207,15 @@ export function CommandPalette({
   const listRef = useRef<HTMLDivElement>(null);
   const { apiClient } = useAuth();
   const { activeWorkspaceId } = useWorkspace();
-  const { documents: allDocs, documentsQuery } = useDocumentsData();
-  const entityQueriesEnabled = isOpen && !!activeWorkspaceId;
+  const trimmedQuery = query.trim();
+  const debouncedQuery = useDebouncedValue(trimmedQuery, 150);
+  const entityQueriesEnabled = isOpen && !!activeWorkspaceId && debouncedQuery.length > 0;
 
-  const tasksQuery = useQuery<TaskResponse[]>({
-    queryKey: ['command-palette', activeWorkspaceId, 'tasks'],
+  const workspaceSearchQuery = useQuery({
+    queryKey: ['command-palette', activeWorkspaceId, 'search', debouncedQuery],
     enabled: entityQueriesEnabled,
     staleTime: 30_000,
-    queryFn: async () => apiClient.listTasks({ pageSize: 100 }),
-  });
-
-  const projectsQuery = useQuery<ProjectResponse[]>({
-    queryKey: ['command-palette', activeWorkspaceId, 'projects'],
-    enabled: entityQueriesEnabled,
-    staleTime: 30_000,
-    queryFn: async () =>
-      apiClient.listProjects({
-        pageSize: 100,
-        sortBy: 'name',
-        sortOrder: 'asc',
-      }),
-  });
-
-  const goalsQuery = useQuery<GoalResponse[]>({
-    queryKey: ['command-palette', activeWorkspaceId, 'goals'],
-    enabled: entityQueriesEnabled,
-    staleTime: 30_000,
-    queryFn: async () =>
-      apiClient.listGoals({
-        pageSize: 100,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      }),
+    queryFn: async () => apiClient.search({ q: debouncedQuery, pageSize: 25 }),
   });
 
   const membersQuery = useQuery<WorkspaceMemberResponse[]>({
@@ -273,38 +258,10 @@ export function CommandPalette({
 
   // Build search results from entities
   const entityResults: CommandItem[] = useMemo(() => {
-    const q = query.trim();
+    const q = debouncedQuery;
     if (!q) return [];
 
     const results: CommandItem[] = [];
-    const taskList = tasksQuery.data ?? [];
-    const projectList = (projectsQuery.data ?? []).map((project) => ({
-      ...project,
-      progress:
-        project.taskCount > 0
-          ? Math.round((project.completedTaskCount / project.taskCount) * 100)
-          : 0,
-    }));
-    const goals = Object.fromEntries(
-      (goalsQuery.data ?? []).map((goal) => [
-        goal.id,
-        {
-          ...goal,
-          type: formatEnumLabel(goal.type),
-        },
-      ]),
-    );
-    // Portfolio initiatives do not have a workspace-wide search contract yet.
-    const initiatives: Record<
-      string,
-      {
-        id: string;
-        name: string;
-        description?: string | null;
-        status: string;
-        progress: number;
-      }
-    > = {};
     const users = Object.fromEntries(
       (membersQuery.data ?? []).map((member) => [
         member.userId,
@@ -318,114 +275,17 @@ export function CommandPalette({
         },
       ]),
     );
-    const projectsById = new Map(projectList.map((project) => [project.id, project]));
 
-    // --- Tasks ---
-    let taskCount = 0;
-    for (const t of taskList) {
-      if (taskCount >= MAX_PER_GROUP) break;
-      const tagStr = t.labels.join(' ');
-      if (matchesAny(q, t.title, t.description ?? undefined, tagStr, t.identifier)) {
-        const proj = projectsById.get(t.projectId);
-        results.push({
-          id: `task-${t.id}`,
-          icon: CheckSquare,
-          label: t.title,
-          group: 'Tasks',
-          subtitle: proj ? `${proj.name} · ${formatEnumLabel(t.status)}` : formatEnumLabel(t.status),
-          dotColor: STATUS_DOT_COLORS[String(t.status)] ?? 'bg-slate-500',
-          onSelect: () => {
-            onNavigate?.('/board');
-            onClose();
-          },
-        });
-        taskCount++;
-      }
-    }
+    const resultCounts: Partial<Record<ResultGroup, number>> = {};
+    for (const result of workspaceSearchQuery.data?.data ?? []) {
+      const item = toWorkspaceSearchCommand(result, onNavigate, onClose);
+      if (!item) continue;
 
-    // --- Projects ---
-    let projCount = 0;
-    for (const p of projectList) {
-      if (projCount >= MAX_PER_GROUP) break;
-      if (matchesAny(q, p.name, p.description ?? undefined, p.identifier)) {
-        results.push({
-          id: `project-${p.id}`,
-          icon: Briefcase,
-          label: p.name,
-          group: 'Projects',
-          subtitle: `${p.status} · ${p.progress}%`,
-          dotColor: PROJECT_STATUS_DOT_COLORS[String(p.status)] ?? 'bg-slate-500',
-          onSelect: () => {
-            onNavigate?.('/projects');
-            onClose();
-          },
-        });
-        projCount++;
-      }
-    }
+      const count = resultCounts[item.group] ?? 0;
+      if (count >= MAX_PER_GROUP) continue;
 
-    // --- Goals ---
-    const goalList = Object.values(goals);
-    let goalCount = 0;
-    for (const g of goalList) {
-      if (goalCount >= MAX_PER_GROUP) break;
-      if (matchesAny(q, g.title)) {
-        results.push({
-          id: `goal-${g.id}`,
-          icon: Target,
-          label: g.title,
-          group: 'Goals',
-          subtitle: g.type,
-          dotColor: GOAL_DOT_COLORS[g.status] ?? 'bg-slate-500',
-          onSelect: () => {
-            onNavigate?.('/goals');
-            onClose();
-          },
-        });
-        goalCount++;
-      }
-    }
-
-    // --- Initiatives ---
-    const initList = Object.values(initiatives);
-    let initCount = 0;
-    for (const i of initList) {
-      if (initCount >= MAX_PER_GROUP) break;
-      if (matchesAny(q, i.name, i.description ?? undefined)) {
-        results.push({
-          id: `initiative-${i.id}`,
-          icon: TrendingUp,
-          label: i.name,
-          group: 'Initiatives',
-          subtitle: `${i.status} · ${i.progress}%`,
-          dotColor: INITIATIVE_DOT_COLORS[i.status] ?? 'bg-slate-500',
-          onSelect: () => {
-            onNavigate?.('/portfolio');
-            onClose();
-          },
-        });
-        initCount++;
-      }
-    }
-
-    // --- Docs ---
-    let docCount = 0;
-    for (const d of allDocs) {
-      if (docCount >= MAX_PER_GROUP) break;
-      if (matchesAny(q, d.title)) {
-        results.push({
-          id: `doc-${d.id}`,
-          icon: FileText,
-          label: d.title,
-          group: 'Docs',
-          subtitle: d.creator.fullName,
-          onSelect: () => {
-            onNavigate?.('/docs');
-            onClose();
-          },
-        });
-        docCount++;
-      }
+      results.push(item);
+      resultCounts[item.group] = count + 1;
     }
 
     // --- People ---
@@ -451,11 +311,11 @@ export function CommandPalette({
     }
 
     return results;
-  }, [query, tasksQuery.data, projectsQuery.data, goalsQuery.data, membersQuery.data, allDocs, onNavigate, onClose]);
+  }, [debouncedQuery, membersQuery.data, workspaceSearchQuery.data?.data, onNavigate, onClose]);
 
   // Combine all items based on query
   const allItems: CommandItem[] = useMemo(() => {
-    const q = query.trim();
+    const q = trimmedQuery;
     if (!q) {
       // Empty query: navigation + quick actions
       return [...navItems, ...actionItems, ...extraItems];
@@ -464,7 +324,7 @@ export function CommandPalette({
     const filteredNav = navItems.filter((item) => fuzzyMatch(q, item.label));
     const filteredActions = actionItems.filter((item) => fuzzyMatch(q, item.label));
     return [...entityResults, ...filteredNav, ...filteredActions, ...extraItems.filter((item) => fuzzyMatch(q, item.label))];
-  }, [query, navItems, actionItems, entityResults, extraItems]);
+  }, [trimmedQuery, navItems, actionItems, entityResults, extraItems]);
 
   // Group items preserving GROUP_ORDER
   const grouped = useMemo(() => {
@@ -485,19 +345,26 @@ export function CommandPalette({
 
   const flatItems = allItems;
   const isSearchingEntities =
-    query.trim().length > 0 &&
-    (tasksQuery.isFetching ||
-      projectsQuery.isFetching ||
-      goalsQuery.isFetching ||
-      membersQuery.isFetching ||
-      documentsQuery.isFetching);
+    trimmedQuery.length > 0 &&
+    (debouncedQuery !== trimmedQuery ||
+    workspaceSearchQuery.isFetching ||
+      membersQuery.isFetching);
 
-  // Reset state on open
-  useEffect(() => {
+  // Reset state on open — track the previous open state and reset during
+  // render to avoid the wasted commit that useEffect would cause.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
     if (isOpen) {
       setQuery('');
       setActiveIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }
+  // Focus on open is a side-effect (not state) so it stays in an effect.
+  useEffect(() => {
+    if (isOpen) {
+      const id = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(id);
     }
   }, [isOpen]);
 
@@ -532,14 +399,17 @@ export function CommandPalette({
     [onClose, flatItems, activeIndex]
   );
 
-  useEffect(() => {
+  // Clamp activeIndex when the result list shrinks. Compare during render
+  // and reset synchronously to keep the index valid before the list paints.
+  const [prevItemsLength, setPrevItemsLength] = useState(flatItems.length);
+  if (prevItemsLength !== flatItems.length) {
+    setPrevItemsLength(flatItems.length);
     if (flatItems.length === 0) {
-      setActiveIndex(0);
-      return;
+      if (activeIndex !== 0) setActiveIndex(0);
+    } else if (activeIndex > flatItems.length - 1) {
+      setActiveIndex(flatItems.length - 1);
     }
-
-    setActiveIndex((prev) => Math.min(prev, flatItems.length - 1));
-  }, [flatItems.length]);
+  }
 
   // Scroll active item into view
   useEffect(() => {

@@ -34,17 +34,17 @@ services:
       - "5000:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-linearprecision};Username=${POSTGRES_USER:-lp};Password=${POSTGRES_PASSWORD:-production_secret_password}
+      # Required env vars (see .env.example). No fallback defaults — fails fast if missing.
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:?POSTGRES_DB is required};Username=${POSTGRES_USER:?POSTGRES_USER is required};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - ConnectionStrings__Redis=redis:6379
-      - Jwt__Key=${JWT_KEY:-super-secret-production-key-that-is-at-least-32-bytes!}
-      - Jwt__Issuer=${JWT_ISSUER:-https://api.linearprecision.com}
-      - Jwt__Audience=${JWT_AUDIENCE:-linear-precision-api}
+      - Jwt__Key=${JWT_KEY:?JWT_KEY is required (>=32 bytes)}
+      - Jwt__Issuer=${JWT_ISSUER:?JWT_ISSUER is required}
+      - Jwt__Audience=${JWT_AUDIENCE:?JWT_AUDIENCE is required}
       - Storage__ServiceUrl=http://minio:9000
       - Storage__BucketName=${MINIO_BUCKET:-linear-precision}
-      - Storage__AccessKey=${MINIO_ROOT_USER:-minioadmin}
-      - Storage__SecretKey=${MINIO_ROOT_PASSWORD:-minioadmin}
-      # Allow the API app to migrate database on startup if you implement that, 
-      # or provide an init container. We assume automatic migration or manual step.
+      - Storage__AccessKey=${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      - Storage__SecretKey=${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      - Cors__AllowedOrigins__0=${CORS_ORIGIN:?CORS_ORIGIN is required (e.g. https://app.example.com)}
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,7 +62,7 @@ services:
     restart: unless-stopped
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-linearprecision};Username=${POSTGRES_USER:-lp};Password=${POSTGRES_PASSWORD:-production_secret_password}
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:?POSTGRES_DB is required};Username=${POSTGRES_USER:?POSTGRES_USER is required};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - ConnectionStrings__Redis=redis:6379
     depends_on:
       postgres:
@@ -76,11 +76,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-linearprecision}
-      POSTGRES_USER: ${POSTGRES_USER:-lp}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-production_secret_password}
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    # F-10: data services are NOT exposed to the host network in production.
+    # Use `docker compose exec postgres psql ...` for local admin.
+    expose:
+      - "5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -94,8 +96,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # F-10: not exposed to host.
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -108,12 +111,14 @@ services:
     image: minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    # F-10: data plane stays on the internal network. Console (9001) can be
+    # reverse-proxied behind auth at the operator's discretion.
+    expose:
+      - "9000"
+      - "9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
     volumes:
       - miniodata:/data
     healthcheck:

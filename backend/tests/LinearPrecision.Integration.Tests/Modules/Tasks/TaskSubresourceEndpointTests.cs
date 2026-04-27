@@ -19,7 +19,7 @@ public class TaskSubresourceEndpointTests
         _fixture = fixture;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Get_task_comments_should_return_author_metadata_after_comment_created()
     {
         var client = await CreateWorkspaceScopedClientAsync();
@@ -43,7 +43,7 @@ public class TaskSubresourceEndpointTests
         payload[0].GetProperty("authorInitials").GetString().Should().NotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Get_task_checklist_should_return_frontend_friendly_items()
     {
         var client = await CreateWorkspaceScopedClientAsync();
@@ -66,7 +66,7 @@ public class TaskSubresourceEndpointTests
         payload[0].GetProperty("isCompleted").GetBoolean().Should().BeFalse();
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Get_task_watchers_should_return_member_identity_metadata()
     {
         var client = await CreateWorkspaceScopedClientAsync();
@@ -91,7 +91,7 @@ public class TaskSubresourceEndpointTests
         payload[0].GetProperty("userInitials").GetString().Should().NotBeNullOrWhiteSpace();
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Task_attachments_should_support_presign_list_and_delete()
     {
         var client = await CreateWorkspaceScopedClientAsync();
@@ -137,6 +137,7 @@ public class TaskSubresourceEndpointTests
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"task-subresources-{Guid.NewGuid():N}@test.com");
 

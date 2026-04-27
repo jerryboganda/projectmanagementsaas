@@ -8,11 +8,11 @@
 
   <ItemGroup>
     <!-- Identity (User entity extends IdentityUser) -->
-    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
     <!-- EF Core (entity base types reference EF attributes) -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Abstractions" Version="9.0.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Abstractions" />
     <!-- MediatR contracts for domain events (INotification) -->
-    <PackageReference Include="MediatR.Contracts" Version="2.0.1" />
+    <PackageReference Include="MediatR.Contracts" />
   </ItemGroup>
 
 </Project>

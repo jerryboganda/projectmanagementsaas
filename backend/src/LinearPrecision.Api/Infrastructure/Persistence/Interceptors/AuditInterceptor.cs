@@ -6,6 +6,11 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace LinearPrecision.Api.Infrastructure.Persistence.Interceptors;
 
+// F-07 — When an AuditEvent writer is wired up here, it MUST route OldValues
+// and NewValues through LinearPrecision.Api.Infrastructure.Persistence.Auditing.AuditRedactor
+// so password hashes, MFA secrets, refresh tokens, and API keys are never
+// persisted in plaintext audit logs. See SensitiveFieldRegistry for the
+// canonical list of redacted property names.
 public sealed class AuditInterceptor : SaveChangesInterceptor
 {
     private readonly ICurrentUser _currentUser;

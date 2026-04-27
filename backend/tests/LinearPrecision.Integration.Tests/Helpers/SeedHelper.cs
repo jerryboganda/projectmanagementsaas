@@ -42,7 +42,7 @@ public static class SeedHelper
             Id = Guid.NewGuid(),
             WorkspaceId = workspaceId,
             Name = name ?? Faker.Commerce.ProductName(),
-            Identifier = Faker.Random.AlphaNumeric(4).ToUpper(),
+            Identifier = Faker.Random.AlphaNumeric(4).ToUpperInvariant(),
             CreatedAt = DateTime.UtcNow,
         };
     }

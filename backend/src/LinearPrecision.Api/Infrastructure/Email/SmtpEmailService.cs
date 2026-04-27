@@ -14,6 +14,11 @@ public sealed class SmtpEmailService : IEmailService
     private readonly IConfiguration _configuration;
     private readonly ILogger<SmtpEmailService> _logger;
 
+    private static readonly System.Text.Json.JsonSerializerOptions IndentedJsonOptions = new()
+    {
+        WriteIndented = true,
+    };
+
     public SmtpEmailService(IConfiguration configuration, ILogger<SmtpEmailService> logger)
     {
         _configuration = configuration;
@@ -41,7 +46,7 @@ public sealed class SmtpEmailService : IEmailService
             await client.ConnectAsync(host, port, SecureSocketOptions.StartTlsWhenAvailable, ct);
 
             if (!string.IsNullOrEmpty(username))
-                await client.AuthenticateAsync(username, password, ct);
+                await client.AuthenticateAsync(username, password ?? string.Empty, ct);
 
             await client.SendAsync(message, ct);
             await client.DisconnectAsync(quit: true, ct);
@@ -62,15 +67,14 @@ public sealed class SmtpEmailService : IEmailService
         var subject = templateName switch
         {
             "notification-digest" => "Your Daily Notification Digest — Linear Precision",
+            "email-confirmation" => "Confirm your Linear Precision email address",
             "workspace-invitation" => "You've been invited to a workspace on Linear Precision",
             "password-reset" => "Reset your Linear Precision password",
             "welcome" => "Welcome to Linear Precision",
             _ => templateName
         };
 
-        var json = System.Text.Json.JsonSerializer.Serialize(
-            model,
-            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var json = System.Text.Json.JsonSerializer.Serialize(model, IndentedJsonOptions);
 
         var htmlBody = $"""
             <html><body style="font-family:sans-serif;color:#111">

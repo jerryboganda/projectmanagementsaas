@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using LinearPrecision.Api.Infrastructure.Persistence;
 using LinearPrecision.Api.Modules.Analytics.Models;
@@ -13,7 +14,7 @@ public static class AnalyticsEndpoints
     {
         var group = app.MapGroup("/api/v1/analytics")
             .WithTags("Analytics")
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapGet("/velocity", GetVelocity)
             .WithName("GetVelocity");
@@ -26,7 +27,9 @@ public static class AnalyticsEndpoints
 
         group.MapGet("/export", ExportReport)
             .WithName("ExportReport")
-            .RequireAuthorization("WorkspaceAdmin");
+            .Produces(StatusCodes.Status200OK, contentType: "text/csv")
+            .Produces(StatusCodes.Status400BadRequest)
+            .RequireAuthorization(WorkspaceRoles.Admin);
     }
 
     // ── GET /api/v1/analytics/velocity ──
@@ -75,7 +78,7 @@ public static class AnalyticsEndpoints
         if (sprint is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Sprint with id '{sprintId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -102,13 +105,16 @@ public static class AnalyticsEndpoints
     }
 
     // ── GET /api/v1/analytics/workload ──
+    // Aggregates per-member task and time totals using set-based queries.
+    // Previous implementation issued 4 DB round trips per member (N+1);
+    // current implementation uses 3 round trips total regardless of member count.
     private static async Task<IResult> GetWorkload(
         AppDbContext db,
         ICurrentUser currentUser,
         CancellationToken ct,
         Guid? projectId = null)
     {
-        // Get all active workspace members with their user info
+        // 1) Active workspace members.
         var members = await db.Memberships.AsNoTracking()
             .Where(m => m.IsActive)
             .Select(m => new
@@ -119,45 +125,57 @@ public static class AnalyticsEndpoints
             })
             .ToListAsync(ct);
 
-        var result = new List<WorkloadMember>();
+        if (members.Count == 0)
+            return Results.Ok(new WorkloadResponse(new List<WorkloadMember>()));
 
-        foreach (var member in members)
+        var memberIds = members.Select(m => m.UserId).ToList();
+
+        // 2) Task aggregates grouped by assignee in a single SQL round trip.
+        var taskQuery = db.TaskItems.AsNoTracking()
+            .Where(t => t.AssigneeId != null && memberIds.Contains(t.AssigneeId.Value));
+
+        if (projectId.HasValue)
+            taskQuery = taskQuery.Where(t => t.ProjectId == projectId.Value);
+
+        var taskAggregates = (await taskQuery
+            .GroupBy(t => t.AssigneeId!.Value)
+            .Select(g => new
+            {
+                UserId = g.Key,
+                Assigned = g.Count(),
+                Completed = g.Count(t => t.Status == TaskItemStatus.Done),
+                Points = g.Sum(t => (int?)t.EstimatePoints ?? 0)
+            })
+            .ToListAsync(ct))
+            .ToDictionary(x => x.UserId);
+
+        // 3) Time aggregates grouped by user in a single SQL round trip.
+        var timeQuery = db.TimeEntries.AsNoTracking()
+            .Where(te => memberIds.Contains(te.UserId));
+
+        if (projectId.HasValue)
+            timeQuery = timeQuery.Where(te => te.ProjectId == projectId.Value);
+
+        var timeAggregates = (await timeQuery
+            .GroupBy(te => te.UserId)
+            .Select(g => new { UserId = g.Key, Minutes = g.Sum(te => te.DurationMinutes) })
+            .ToListAsync(ct))
+            .ToDictionary(x => x.UserId, x => x.Minutes);
+
+        // 4) Stitch results in memory (cheap; bounded by member count).
+        var result = members.Select(m =>
         {
-            var taskQuery = db.TaskItems.AsNoTracking()
-                .Where(t => t.AssigneeId == member.UserId);
-
-            if (projectId.HasValue)
-                taskQuery = taskQuery.Where(t => t.ProjectId == projectId.Value);
-
-            var assignedTasks = await taskQuery.CountAsync(ct);
-
-            var completedTasks = await taskQuery
-                .Where(t => t.Status == TaskItemStatus.Done)
-                .CountAsync(ct);
-
-            var totalPoints = await taskQuery
-                .SumAsync(t => t.EstimatePoints ?? 0, ct);
-
-            var timeQuery = db.TimeEntries.AsNoTracking()
-                .Where(te => te.UserId == member.UserId);
-
-            if (projectId.HasValue)
-                timeQuery = timeQuery.Where(te => te.ProjectId == projectId.Value);
-
-            var totalMinutes = await timeQuery
-                .SumAsync(te => te.DurationMinutes, ct);
-
-            var totalHoursLogged = Math.Round((decimal)totalMinutes / 60, 2);
-
-            result.Add(new WorkloadMember(
-                member.UserId,
-                member.FullName,
-                member.AvatarUrl,
-                assignedTasks,
-                completedTasks,
-                totalPoints,
-                totalHoursLogged));
-        }
+            taskAggregates.TryGetValue(m.UserId, out var t);
+            timeAggregates.TryGetValue(m.UserId, out var minutes);
+            return new WorkloadMember(
+                m.UserId,
+                m.FullName,
+                m.AvatarUrl,
+                t?.Assigned ?? 0,
+                t?.Completed ?? 0,
+                t?.Points ?? 0,
+                Math.Round((decimal)minutes / 60, 2));
+        }).ToList();
 
         return Results.Ok(new WorkloadResponse(result));
     }
@@ -175,24 +193,24 @@ public static class AnalyticsEndpoints
         if (!format.Equals("csv", StringComparison.OrdinalIgnoreCase))
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "Only 'csv' format is currently supported.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
         return reportType.ToLowerInvariant() switch
         {
-            "tasks" => await ExportTasks(db, ct, projectId),
-            "velocity" => await ExportVelocity(db, tenantContext, ct, projectId),
-            "workload" => await ExportWorkload(db, tenantContext, ct, projectId),
+            "tasks" => await ExportTasks(db, projectId, ct),
+            "velocity" => await ExportVelocity(db, tenantContext, projectId, ct),
+            "workload" => await ExportWorkload(db, tenantContext, projectId, ct),
             _ => Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "Unsupported report type. Supported values are 'tasks', 'velocity', and 'workload'.",
                 statusCode: StatusCodes.Status400BadRequest),
         };
     }
 
-    private static async Task<IResult> ExportTasks(AppDbContext db, CancellationToken ct, Guid? projectId)
+    private static async Task<IResult> ExportTasks(AppDbContext db, Guid? projectId, CancellationToken ct)
     {
         var taskQuery = db.TaskItems.AsNoTracking();
 
@@ -226,10 +244,10 @@ public static class AnalyticsEndpoints
                 EscapeCsv(t.Title),
                 t.Status,
                 t.Priority,
-                t.EstimatePoints?.ToString() ?? "",
-                t.DueDate?.ToString("yyyy-MM-dd") ?? "",
+                t.EstimatePoints?.ToString(CultureInfo.InvariantCulture) ?? "",
+                t.DueDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
                 EscapeCsv(t.AssigneeName),
-                t.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")));
+                t.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)));
         }
 
         var csvBytes = Encoding.UTF8.GetBytes(sb.ToString());
@@ -239,12 +257,12 @@ public static class AnalyticsEndpoints
     private static async Task<IResult> ExportVelocity(
         AppDbContext db,
         ITenantContext tenantContext,
-        CancellationToken ct,
-        Guid? projectId)
+        Guid? projectId,
+        CancellationToken ct)
     {
         var workspaceId = tenantContext.WorkspaceId;
         if (!workspaceId.HasValue)
-            return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "Workspace context is required.");
+            return Results.Problem(statusCode: 401, title: ProblemTitles.Unauthorized, detail: "Workspace context is required.");
 
         var sprintQuery = db.Sprints.AsNoTracking()
             .Where(s => s.WorkspaceId == workspaceId.Value && s.Status == SprintStatus.Completed);
@@ -273,10 +291,10 @@ public static class AnalyticsEndpoints
             sb.AppendLine(string.Join(",",
                 sprint.Id,
                 EscapeCsv(sprint.Name),
-                sprint.StartDate.ToString("yyyy-MM-dd"),
-                sprint.EndDate.ToString("yyyy-MM-dd"),
+                sprint.StartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                sprint.EndDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 sprint.PlannedPoints,
-                sprint.CompletedPoints?.ToString() ?? ""));
+                sprint.CompletedPoints?.ToString(CultureInfo.InvariantCulture) ?? ""));
         }
 
         var csvBytes = Encoding.UTF8.GetBytes(sb.ToString());
@@ -286,12 +304,12 @@ public static class AnalyticsEndpoints
     private static async Task<IResult> ExportWorkload(
         AppDbContext db,
         ITenantContext tenantContext,
-        CancellationToken ct,
-        Guid? projectId)
+        Guid? projectId,
+        CancellationToken ct)
     {
         var workspaceId = tenantContext.WorkspaceId;
         if (!workspaceId.HasValue)
-            return Results.Problem(statusCode: 401, title: "Unauthorized", detail: "Workspace context is required.");
+            return Results.Problem(statusCode: 401, title: ProblemTitles.Unauthorized, detail: "Workspace context is required.");
 
         var members = await db.Memberships.AsNoTracking()
             .Where(m => m.WorkspaceId == workspaceId.Value)
@@ -302,42 +320,54 @@ public static class AnalyticsEndpoints
             })
             .ToListAsync(ct);
 
+        var memberIds = members.Select(m => m.UserId).ToList();
+
+        var taskQuery = db.TaskItems.AsNoTracking()
+            .Where(t => t.AssigneeId.HasValue && memberIds.Contains(t.AssigneeId.Value));
+
+        if (projectId.HasValue)
+            taskQuery = taskQuery.Where(t => t.ProjectId == projectId.Value);
+
+        var taskAggregates = (await taskQuery
+            .GroupBy(t => t.AssigneeId!.Value)
+            .Select(g => new
+            {
+                UserId = g.Key,
+                AssignedTasks = g.Count(),
+                CompletedTasks = g.Count(t => t.Status == TaskItemStatus.Done || t.Status == TaskItemStatus.Cancelled),
+                TotalPoints = g.Sum(t => t.EstimatePoints ?? 0)
+            })
+            .ToListAsync(ct))
+            .ToDictionary(x => x.UserId);
+
+        var timeEntryQuery = db.TimeEntries.AsNoTracking()
+            .Where(te => memberIds.Contains(te.UserId));
+
+        if (projectId.HasValue)
+            timeEntryQuery = timeEntryQuery.Where(te => te.ProjectId == projectId.Value);
+
+        var timeAggregates = (await timeEntryQuery
+            .GroupBy(te => te.UserId)
+            .Select(g => new { UserId = g.Key, TotalMinutes = g.Sum(te => te.DurationMinutes) })
+            .ToListAsync(ct))
+            .ToDictionary(x => x.UserId, x => x.TotalMinutes);
+
         var sb = new StringBuilder();
         sb.AppendLine("UserId,FullName,AssignedTasks,CompletedTasks,TotalPoints,HoursLogged");
 
         foreach (var member in members)
         {
-            var taskQuery = db.TaskItems.AsNoTracking()
-                .Where(t => t.AssigneeId == member.UserId);
-
-            if (projectId.HasValue)
-                taskQuery = taskQuery.Where(t => t.ProjectId == projectId.Value);
-
-            var assignedTasks = await taskQuery.CountAsync(ct);
-            var completedTasks = await taskQuery.CountAsync(
-                t => t.Status == TaskItemStatus.Done ||
-                     t.Status == TaskItemStatus.Cancelled,
-                ct);
-            var totalPoints = await taskQuery.SumAsync(t => t.EstimatePoints ?? 0, ct);
-
-            var timeEntryQuery = db.TimeEntries.AsNoTracking()
-                .Where(te => te.UserId == member.UserId);
-
-            if (projectId.HasValue)
-            {
-                timeEntryQuery = timeEntryQuery.Where(te => te.Task != null && te.Task.ProjectId == projectId.Value);
-            }
-
-            var totalMinutes = await timeEntryQuery.SumAsync(te => te.DurationMinutes, ct);
+            taskAggregates.TryGetValue(member.UserId, out var taskAggregate);
+            timeAggregates.TryGetValue(member.UserId, out var totalMinutes);
             var totalHoursLogged = Math.Round((decimal)totalMinutes / 60, 2);
 
             sb.AppendLine(string.Join(",",
                 member.UserId,
                 EscapeCsv(member.FullName),
-                assignedTasks,
-                completedTasks,
-                totalPoints,
-                totalHoursLogged.ToString("0.##")));
+                taskAggregate?.AssignedTasks ?? 0,
+                taskAggregate?.CompletedTasks ?? 0,
+                taskAggregate?.TotalPoints ?? 0,
+                totalHoursLogged.ToString("0.##", CultureInfo.InvariantCulture)));
         }
 
         var csvBytes = Encoding.UTF8.GetBytes(sb.ToString());

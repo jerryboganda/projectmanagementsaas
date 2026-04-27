@@ -424,6 +424,9 @@ function WatchersSection({
         <button
           onClick={() => setDropdownOpen((prev) => !prev)}
           disabled={availableMembers.length === 0 || isPending}
+          aria-haspopup="listbox"
+          aria-expanded={dropdownOpen}
+          aria-label="Add watcher"
           className="flex items-center gap-1.5 rounded-md border border-neutral-border bg-white/[0.03] px-3 py-1.5 text-[12px] text-slate-400 transition-colors hover:border-primary/40 hover:text-slate-200 disabled:opacity-40"
         >
           <Plus className="size-3.5" />
@@ -625,10 +628,14 @@ export function TaskDetail({
   isAttachmentPending,
 }: TaskDetailProps) {
   const [draft, setDraft] = useState<BoardTask>(task);
-
-  useEffect(() => {
+  // Reset draft when the parent supplies a new task. Comparing during render
+  // and calling setState inline is the React-recommended pattern for resetting
+  // local state from a prop — see https://react.dev/reference/react/useState#storing-information-from-previous-renders
+  const [prevTaskId, setPrevTaskId] = useState(task.id);
+  if (prevTaskId !== task.id) {
+    setPrevTaskId(task.id);
     setDraft(task);
-  }, [task]);
+  }
 
   const projectName = useMemo(
     () => projects.find((project) => project.id === draft.projectId)?.name ?? 'Workspace',

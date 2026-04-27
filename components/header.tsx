@@ -177,6 +177,7 @@ export function Header({
             onClick={() => setProfileOpen((open) => !open)}
             className="flex items-center gap-1.5 rounded-sm p-0.5 transition-colors hover:bg-white/5"
             aria-label="User menu"
+            aria-haspopup="menu"
             aria-expanded={profileOpen}
           >
             <div className="grid size-8 flex-shrink-0 place-items-center overflow-hidden rounded-sm border border-neutral-border bg-slate-800">

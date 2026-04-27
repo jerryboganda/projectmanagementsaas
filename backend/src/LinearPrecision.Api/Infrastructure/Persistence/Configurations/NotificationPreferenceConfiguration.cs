@@ -19,6 +19,11 @@ public sealed class NotificationPreferenceConfiguration : IEntityTypeConfigurati
             .IsUnique()
             .HasDatabaseName("ix_notification_preferences_user_id_workspace_id_event_type");
 
+        // Index to quickly find users with email digests enabled
+        builder.HasIndex(np => np.UserId)
+            .HasDatabaseName("ix_notification_preferences_user_id_email_enabled")
+            .HasFilter("email = true");
+
         // ── Foreign keys ──
         builder.HasOne<Workspace>()
             .WithMany()

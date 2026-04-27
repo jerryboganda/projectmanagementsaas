@@ -53,7 +53,7 @@ public static class NotificationEndpoints
         if (!string.IsNullOrEmpty(type))
             query = query.Where(n => n.Type == type);
 
-        var effectivePageSize = Math.Min(pageSize, 100);
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
         var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
 
         var notifications = await query
@@ -86,7 +86,7 @@ public static class NotificationEndpoints
         if (notification is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Notification with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -125,7 +125,7 @@ public static class NotificationEndpoints
         if (notification is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Notification with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

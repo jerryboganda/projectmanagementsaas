@@ -14,6 +14,7 @@ import type {
   GoalUpdateInput,
 } from "@/components/goals/data";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface GoalOwnerOption {
   id: string;
@@ -139,6 +140,7 @@ export function GoalsDetail({
   isUpdatingInitiative = false,
   isDeletingInitiative = false,
 }: Props) {
+  const confirm = useConfirm();
   const [title, setTitle] = useState(goal.title);
   const [description, setDescription] = useState(goal.description ?? "");
   const [status, setStatus] = useState<GoalSurfaceStatus>(goal.status);
@@ -191,10 +193,13 @@ export function GoalsDetail({
   };
 
   const handleDelete = async () => {
-    // eslint-disable-next-line no-alert
-    if (!window.confirm("Delete this goal? This action cannot be undone.")) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Delete goal",
+      message: "Delete this goal? This action cannot be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
 
     await onDelete();
     onClose();
@@ -452,9 +457,14 @@ export function GoalsDetail({
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => {
-                      // eslint-disable-next-line no-alert
-                      if (window.confirm(`Unlink "${project.name}" from this goal?`)) {
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: "Unlink project",
+                        message: `Unlink "${project.name}" from this goal?`,
+                        confirmLabel: "Unlink",
+                        tone: "danger",
+                      });
+                      if (ok) {
                         void onUnlinkProject(project.id);
                       }
                     }}

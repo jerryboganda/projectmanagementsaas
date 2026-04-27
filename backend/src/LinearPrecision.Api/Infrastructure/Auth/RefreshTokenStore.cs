@@ -30,7 +30,7 @@ public sealed class RefreshTokenStore
         var db = _redis.GetDatabase();
         var json = await db.StringGetAsync($"{KeyPrefix}{tokenHash}");
         if (json.IsNullOrEmpty) return null;
-        return JsonSerializer.Deserialize<RefreshTokenData>(json!);
+        return JsonSerializer.Deserialize<RefreshTokenData>((string)json!);
     }
 
     public async Task RevokeAsync(string tokenHash)

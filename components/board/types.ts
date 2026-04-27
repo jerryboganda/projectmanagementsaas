@@ -1,6 +1,5 @@
 import type {
   CreateTaskRequest,
-  ProjectResponse,
   TaskPriority,
   TaskResponse,
   TaskStatus,
@@ -10,7 +9,7 @@ import type {
 
 export type BoardTaskStatus = 'To Do' | 'In Progress' | 'In Review' | 'Done';
 export type BoardTaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
-export type BoardTaskType = 'task' | 'bug' | 'story' | 'feature' | 'epic';
+type BoardTaskType = 'task' | 'bug' | 'story' | 'feature' | 'epic';
 
 export interface BoardUser {
   id: string;
@@ -169,8 +168,4 @@ export function toUpdateTaskRequest(task: BoardTask): UpdateTaskRequest {
     sortOrder: null,
     customFields: null,
   };
-}
-
-export function findProjectName(projects: ProjectResponse[], projectId: string) {
-  return projects.find((project) => project.id === projectId)?.name ?? 'Workspace';
 }

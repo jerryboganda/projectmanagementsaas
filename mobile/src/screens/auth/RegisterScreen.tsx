@@ -1,28 +1,19 @@
-﻿import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { AlertCircle, Loader2, Check } from 'lucide-react';
-import {
-  setAccessToken,
-  setRefreshToken,
-  persistSession,
-} from '../../auth/token-store';
-import { api, ApiError } from '../../api/client';
-import { enrollBiometric, getBiometricCapability } from '../../auth/biometric';
+﻿import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, Loader2, Check, MailCheck } from 'lucide-react';
+import { api, ApiError, type RegistrationPendingResponse } from '../../api/client';
 
 export function RegisterScreen() {
-  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [biometricReady, setBiometricReady] = useState(false);
-
-  useEffect(() => {
-    void getBiometricCapability().then((c) => setBiometricReady(c.available === true));
-  }, []);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [pendingRegistration, setPendingRegistration] = useState<RegistrationPendingResponse | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -35,27 +26,109 @@ export function RegisterScreen() {
 
     setBusy(true);
     try {
-      const session = await api.auth.register({
+      const pending = await api.auth.register({
         email,
         password,
         fullName: name.trim(),
       });
-      setAccessToken(session.accessToken);
-      if (session.refreshToken) await setRefreshToken(session.refreshToken);
-      await persistSession(session);
-      if (session.refreshToken && biometricReady) {
-        try {
-          await enrollBiometric(session.user.email, session.refreshToken);
-        } catch {
-          /* best-effort */
-        }
-      }
-      navigate('/', { replace: true });
+      setPendingRegistration(pending);
+      setPassword('');
+      setConfirm('');
+      setAgreed(false);
+      setResendMessage(null);
     } catch (err) {
       setError(toMessage(err, 'Registration failed.'));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function resendConfirmation() {
+    const targetEmail = pendingRegistration?.email ?? email;
+    if (!targetEmail) return setError('Enter your email address first.');
+
+    setError(null);
+    setResendMessage(null);
+    setResendBusy(true);
+    try {
+      await api.auth.resendConfirmation({ email: targetEmail });
+      setResendMessage('A fresh confirmation email is on its way.');
+    } catch (err) {
+      setError(toMessage(err, 'Could not resend confirmation email.'));
+    } finally {
+      setResendBusy(false);
+    }
+  }
+
+  if (pendingRegistration) {
+    return (
+      <div
+        className="fixed inset-0 flex flex-col bg-[#0A0A0A] text-slate-100"
+        style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}
+      >
+        <div className="flex flex-1 flex-col justify-center px-6 py-10">
+          <div className="mb-5 flex size-12 items-center justify-center rounded-[8px] border border-[#0066FF]/30 bg-[#0066FF]/10">
+            <MailCheck className="h-6 w-6 text-[#3388FF]" />
+          </div>
+          <h1 className="mb-2 text-2xl font-semibold tracking-tight text-slate-50">Check your email</h1>
+          <p className="text-[13px] leading-6 text-slate-400">{pendingRegistration.message}</p>
+
+          <div className="mt-6 rounded-[4px] border border-[#1A1A1A] bg-[#111] px-4 py-3">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+              Confirmation sent to
+            </p>
+            <p className="mt-2 break-words text-[14px] font-medium text-slate-100">
+              {pendingRegistration.email}
+            </p>
+          </div>
+
+          {error ? (
+            <div
+              role="alert"
+              className="mt-4 flex items-start gap-2 rounded-[4px] border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+            >
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          ) : null}
+
+          {resendMessage ? (
+            <div className="mt-4 rounded-[4px] border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300">
+              {resendMessage}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={resendConfirmation}
+            disabled={resendBusy}
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-[4px] border border-[#222] bg-[#111] py-3 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-slate-100 active:opacity-90 disabled:opacity-50 transition-opacity"
+          >
+            {resendBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            {resendBusy ? 'Sending...' : 'Resend email'}
+          </button>
+
+          <Link
+            to="/login"
+            className="mt-3 flex w-full items-center justify-center rounded-[4px] bg-[#0066FF] py-3 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-white active:opacity-90 transition-opacity"
+          >
+            Sign in
+          </Link>
+
+          <button
+            type="button"
+            onClick={() => {
+              setPendingRegistration(null);
+              setError(null);
+              setResendMessage(null);
+            }}
+            className="mt-5 text-center font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500"
+          >
+            Use a different email
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -149,7 +222,7 @@ export function RegisterScreen() {
             className="mt-2 flex w-full items-center justify-center gap-2 rounded-[4px] bg-[#0066FF] py-3 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-white active:opacity-90 disabled:opacity-50 transition-opacity"
           >
             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-            {busy ? 'Creatingâ€¦' : 'Create account'}
+            {busy ? 'Creating...' : 'Create account'}
           </button>
         </form>
 

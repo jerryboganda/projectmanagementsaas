@@ -2,7 +2,13 @@ namespace LinearPrecision.Shared.Domain;
 
 /// <summary>
 /// Lightweight Result type for returning success/failure from handlers without exceptions.
+/// Static factory methods on a generic type are the canonical pattern for this kind of
+/// discriminated-union helper; CA1000 is suppressed deliberately.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design",
+    "CA1000:Do not declare static members on generic types",
+    Justification = "Idiomatic Result<T>.Success/Failure factory methods.")]
 public class Result<T>
 {
     public bool IsSuccess { get; }

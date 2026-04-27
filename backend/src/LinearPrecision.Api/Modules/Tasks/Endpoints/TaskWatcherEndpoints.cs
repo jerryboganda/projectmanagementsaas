@@ -15,19 +15,27 @@ public static class TaskWatcherEndpoints
         var group = app.MapGroup("/api/v1/tasks/{taskId:guid}/watchers")
             .WithTags("Tasks");
 
-        group.MapGet("/", ListWatchers).WithName("ListTaskWatchers").RequireAuthorization("WorkspaceGuest");
-        group.MapPost("/", AddWatcher).WithName("AddTaskWatcher").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{userId:guid}", RemoveWatcher).WithName("RemoveTaskWatcher").RequireAuthorization("WorkspaceMember");
+        group.MapGet("/", ListWatchers).WithName("ListTaskWatchers").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapPost("/", AddWatcher).WithName("AddTaskWatcher").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{userId:guid}", RemoveWatcher).WithName("RemoveTaskWatcher").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     private static async Task<IResult> ListWatchers(
         Guid taskId,
         AppDbContext db,
-        CancellationToken ct)
+        CancellationToken ct,
+        int page = 1,
+        int pageSize = 25)
     {
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var watchers = await db.TaskWatchers.AsNoTracking()
             .Where(watcher => watcher.TaskId == taskId)
             .OrderBy(watcher => watcher.CreatedAt)
+            .ThenBy(watcher => watcher.UserId)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(watcher => new TaskWatcherListItemResponse(
                 watcher.UserId,
                 TaskEndpointFormatting.DisplayName(watcher.User.DisplayName, watcher.User.FullName),
@@ -56,7 +64,7 @@ public static class TaskWatcherEndpoints
         if (projectId is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Task with id '{taskId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -65,7 +73,7 @@ public static class TaskWatcherEndpoints
         if (await db.TaskWatchers.AnyAsync(w => w.TaskId == taskId && w.UserId == request.UserId, ct))
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: "User is already watching this task.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -98,7 +106,7 @@ public static class TaskWatcherEndpoints
         if (watcher is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Watcher was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

@@ -48,13 +48,13 @@ Do NOT wait for the user to ask for validation. Do NOT skip it.
 
 ## Project Identity
 
-Mixed PM SaaS codebase: Next.js 15 App Router frontend at root, ASP.NET Core .NET 9 modular monolith under `backend/`, secondary mobile applet under `Mobile App/`.
+Mixed PM SaaS codebase: Next.js 16 App Router frontend at root, ASP.NET Core .NET 9 modular monolith under `backend/`, secondary mobile applet under `mobile/`.
 
 ## Stack
 
-- **Frontend:** Next.js 15, React 19, TypeScript 5.9 strict, Tailwind CSS v4, Motion, Lucide React, Recharts, TanStack Query, @hello-pangea/dnd
+- **Frontend:** Next.js 16, React 19, TypeScript 6 strict, Tailwind CSS v4, Motion, Lucide React, Recharts, TanStack Query, @hello-pangea/dnd
 - **Backend:** ASP.NET Core .NET 9, EF Core, PostgreSQL 16, Redis 7, MinIO, SignalR, Hangfire
-- **Testing:** Playwright (E2E), MSTest (.NET)
+- **Testing:** Vitest (frontend unit), Playwright (E2E), xUnit (.NET)
 
 ## Serialized Chokepoints (NEVER edit in parallel)
 

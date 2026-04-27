@@ -1,4 +1,4 @@
-/** @type {import('postcss-load-config').Config} */
+// PostCSS configuration consumed by Tailwind v4.
 const config = {
   plugins: {
     '@tailwindcss/postcss': {},

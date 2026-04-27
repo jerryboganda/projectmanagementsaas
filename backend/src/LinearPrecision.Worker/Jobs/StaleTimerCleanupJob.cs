@@ -13,6 +13,8 @@ namespace LinearPrecision.Worker.Jobs;
 /// </summary>
 public class StaleTimerCleanupJob
 {
+    private const int CleanupBatchSize = 500;
+
     private readonly ILogger<StaleTimerCleanupJob> _logger;
     private readonly AppDbContext _db;
     private static readonly TimeSpan StaleThreshold = TimeSpan.FromHours(12);
@@ -24,6 +26,7 @@ public class StaleTimerCleanupJob
     }
 
     [AutomaticRetry(Attempts = 1)]
+    [DisableConcurrentExecution(60 * 60)]
     [Queue("cleanup")]
     public async Task CleanupStaleTimersAsync()
     {
@@ -32,54 +35,70 @@ public class StaleTimerCleanupJob
         try
         {
             var cutoff = DateTime.UtcNow - StaleThreshold;
+            var totalStopped = 0;
 
-            // Find running timers (EndTime == null) started more than 12 hours ago
-            var staleTimers = await _db.TimeEntries
-                .IgnoreQueryFilters()
-                .Where(te => te.EndTime == null && te.StartTime < cutoff)
-                .ToListAsync();
-
-            if (staleTimers.Count == 0)
+            while (true)
             {
-                _logger.LogInformation("No stale timers found. Skipping.");
-                return;
-            }
+                var staleTimers = await _db.TimeEntries
+                    .IgnoreQueryFilters()
+                    .Where(te => te.EndTime == null && te.StartTime < cutoff)
+                    .OrderBy(te => te.StartTime)
+                    .Take(CleanupBatchSize)
+                    .ToListAsync();
 
-            foreach (var timer in staleTimers)
-            {
-                // Auto-stop: set EndTime to StartTime + 12h, calculate duration
-                timer.EndTime = timer.StartTime + StaleThreshold;
-                timer.DurationMinutes = (int)StaleThreshold.TotalMinutes; // 720
-
-                // Append auto-stop note to description
-                timer.Description = string.IsNullOrEmpty(timer.Description)
-                    ? "[Auto-stopped: stale timer]"
-                    : timer.Description + " [Auto-stopped: stale timer]";
-
-                // Create notification for the affected user
-                _db.Notifications.Add(new Notification
+                if (staleTimers.Count == 0)
                 {
-                    Id = Guid.CreateVersion7(),
-                    WorkspaceId = timer.WorkspaceId,
-                    RecipientId = timer.UserId,
-                    Type = "timer_auto_stopped",
-                    Title = "Timer auto-stopped",
-                    Body = $"Your time entry running since {timer.StartTime:g} was automatically stopped after {StaleThreshold.TotalHours} hours.",
-                    EntityType = "TimeEntry",
-                    EntityId = timer.Id,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
-                });
+                    if (totalStopped == 0)
+                    {
+                        _logger.LogInformation("No stale timers found. Skipping.");
+                    }
 
-                _logger.LogDebug(
-                    "Auto-stopped stale timer {TimerId} for user {UserId} in workspace {WorkspaceId}",
-                    timer.Id, timer.UserId, timer.WorkspaceId);
+                    break;
+                }
+
+                foreach (var timer in staleTimers)
+                {
+                    // Auto-stop: set EndTime to StartTime + 12h, calculate duration
+                    timer.EndTime = timer.StartTime + StaleThreshold;
+                    timer.DurationMinutes = (int)StaleThreshold.TotalMinutes; // 720
+
+                    // Append auto-stop note to description
+                    timer.Description = string.IsNullOrEmpty(timer.Description)
+                        ? "[Auto-stopped: stale timer]"
+                        : timer.Description + " [Auto-stopped: stale timer]";
+
+                    // Create notification for the affected user
+                    _db.Notifications.Add(new Notification
+                    {
+                        Id = Guid.CreateVersion7(),
+                        WorkspaceId = timer.WorkspaceId,
+                        RecipientId = timer.UserId,
+                        Type = "timer_auto_stopped",
+                        Title = "Timer auto-stopped",
+                        Body = $"Your time entry running since {timer.StartTime:g} was automatically stopped after {StaleThreshold.TotalHours} hours.",
+                        EntityType = "TimeEntry",
+                        EntityId = timer.Id,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow,
+                    });
+
+                    _logger.LogDebug(
+                        "Auto-stopped stale timer {TimerId} for user {UserId} in workspace {WorkspaceId}",
+                        timer.Id, timer.UserId, timer.WorkspaceId);
+                }
+
+                await _db.SaveChangesAsync();
+                totalStopped += staleTimers.Count;
+                _db.ChangeTracker.Clear();
+
+                if (staleTimers.Count < CleanupBatchSize)
+                {
+                    break;
+                }
             }
-
-            await _db.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Stale timer cleanup completed. Stopped {Count} stale timers", staleTimers.Count);
+                "Stale timer cleanup completed. Stopped {Count} stale timers", totalStopped);
         }
         catch (Exception ex)
         {

@@ -9,35 +9,45 @@ namespace LinearPrecision.Api.Modules.Teams.Endpoints;
 
 public static class TeamEndpoints
 {
+    private const int DefaultPageSize = 50;
+    private const int MaxPageSize = 100;
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/teams")
             .WithTags("Teams")
             .RequireAuthorization();
 
-        group.MapGet("/", ListTeams).WithName("ListTeams").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/", CreateTeam).WithName("CreateTeam").RequireAuthorization("WorkspaceMember");
-        group.MapGet("/{id:guid}", GetTeam).WithName("GetTeam").RequireAuthorization("WorkspaceMember");
-        group.MapPut("/{id:guid}", UpdateTeam).WithName("UpdateTeam").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{id:guid}", DeleteTeam).WithName("DeleteTeam").RequireAuthorization("WorkspaceMember");
-        group.MapPut("/{id:guid}/members", SetMembers).WithName("SetTeamMembers").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/{id:guid}/members/{userId:guid}", AddMember).WithName("AddTeamMember").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{id:guid}/members/{userId:guid}", RemoveMember).WithName("RemoveTeamMember").RequireAuthorization("WorkspaceMember");
+        group.MapGet("/", ListTeams).WithName("ListTeams").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/", CreateTeam).WithName("CreateTeam").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapGet("/{id:guid}", GetTeam).WithName("GetTeam").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPut("/{id:guid}", UpdateTeam).WithName("UpdateTeam").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{id:guid}", DeleteTeam).WithName("DeleteTeam").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPut("/{id:guid}/members", SetMembers).WithName("SetTeamMembers").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/{id:guid}/members/{userId:guid}", AddMember).WithName("AddTeamMember").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{id:guid}/members/{userId:guid}", RemoveMember).WithName("RemoveTeamMember").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── GET /api/v1/teams ──
     private static async Task<IResult> ListTeams(
         AppDbContext db,
         ITenantContext tenant,
-        CancellationToken ct)
+        CancellationToken ct,
+        int page = 1,
+        int pageSize = DefaultPageSize)
     {
         var workspaceId = tenant.WorkspaceId
             ?? throw new InvalidOperationException("Workspace context is required.");
 
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var teams = await db.Teams
             .AsNoTracking()
-            .Where(t => !t.IsDeleted)
+            .Where(t => t.WorkspaceId == workspaceId && !t.IsDeleted)
             .OrderBy(t => t.Name)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(t => new
             {
                 t.Id,
@@ -45,27 +55,50 @@ public static class TeamEndpoints
                 t.Description,
                 t.Color,
                 t.CreatedAt,
-                t.UpdatedAt,
-                Members = db.TeamMemberships
-                    .Where(m => m.TeamId == t.Id)
-                    .Join(db.Users, m => m.UserId, u => u.Id, (m, u) => new TeamMemberResponse(
-                        u.Id,
-                        u.FullName,
-                        u.Email!,
-                        u.AvatarUrl))
-                    .ToList()
+                t.UpdatedAt
             })
             .ToListAsync(ct);
 
-        var response = teams.Select(t => new TeamResponse(
-            t.Id,
-            t.Name,
-            t.Description,
-            t.Color,
-            t.Members.Count,
-            t.Members,
-            t.CreatedAt,
-            t.UpdatedAt)).ToList();
+        if (teams.Count == 0)
+        {
+            return Results.Ok(new List<TeamResponse>());
+        }
+
+        var teamIds = teams.Select(t => t.Id).ToList();
+        var memberRows = await db.TeamMemberships
+            .AsNoTracking()
+            .Where(m => teamIds.Contains(m.TeamId))
+            .Join(db.Users, m => m.UserId, u => u.Id, (m, u) => new
+            {
+                m.TeamId,
+                Member = new TeamMemberResponse(
+                    u.Id,
+                    u.FullName,
+                    u.Email!,
+                    u.AvatarUrl)
+            })
+            .ToListAsync(ct);
+
+        var membersByTeam = memberRows
+            .GroupBy(row => row.TeamId)
+            .ToDictionary(group => group.Key, group => group.Select(row => row.Member).ToList());
+
+        var response = teams.Select(t =>
+        {
+            var members = membersByTeam.TryGetValue(t.Id, out var teamMembers)
+                ? teamMembers
+                : new List<TeamMemberResponse>();
+
+            return new TeamResponse(
+                t.Id,
+                t.Name,
+                t.Description,
+                t.Color,
+                members.Count,
+                members,
+                t.CreatedAt,
+                t.UpdatedAt);
+        }).ToList();
 
         return Results.Ok(response);
     }
@@ -78,7 +111,7 @@ public static class TeamEndpoints
     {
         var team = await LoadTeamAsync(db, id, ct);
         return team is null
-            ? Results.Problem(title: "Not Found", statusCode: StatusCodes.Status404NotFound)
+            ? Results.Problem(title: ProblemTitles.NotFound, statusCode: StatusCodes.Status404NotFound)
             : Results.Ok(team);
     }
 
@@ -103,11 +136,11 @@ public static class TeamEndpoints
         var name = request.Name.Trim();
 
         var nameTaken = await db.Teams
-            .AnyAsync(t => !t.IsDeleted && t.Name.ToLower() == name.ToLower(), ct);
+            .AnyAsync(t => !t.IsDeleted && t.Name.ToLowerInvariant() == name.ToLowerInvariant(), ct);
         if (nameTaken)
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: $"A team named '{name}' already exists.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -165,18 +198,18 @@ public static class TeamEndpoints
         var team = await db.Teams.FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, ct);
         if (team is null)
         {
-            return Results.Problem(title: "Not Found", statusCode: StatusCodes.Status404NotFound);
+            return Results.Problem(title: ProblemTitles.NotFound, statusCode: StatusCodes.Status404NotFound);
         }
 
         var name = request.Name.Trim();
         if (!string.Equals(team.Name, name, StringComparison.OrdinalIgnoreCase))
         {
             var nameTaken = await db.Teams
-                .AnyAsync(t => !t.IsDeleted && t.Id != id && t.Name.ToLower() == name.ToLower(), ct);
+                .AnyAsync(t => !t.IsDeleted && t.Id != id && t.Name.ToLowerInvariant() == name.ToLowerInvariant(), ct);
             if (nameTaken)
             {
                 return Results.Problem(
-                    title: "Conflict",
+                    title: ProblemTitles.Conflict,
                     detail: $"A team named '{name}' already exists.",
                     statusCode: StatusCodes.Status409Conflict);
             }
@@ -203,7 +236,7 @@ public static class TeamEndpoints
         var team = await db.Teams.FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, ct);
         if (team is null)
         {
-            return Results.Problem(title: "Not Found", statusCode: StatusCodes.Status404NotFound);
+            return Results.Problem(title: ProblemTitles.NotFound, statusCode: StatusCodes.Status404NotFound);
         }
 
         team.IsDeleted = true;
@@ -224,7 +257,7 @@ public static class TeamEndpoints
         var team = await db.Teams.FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, ct);
         if (team is null)
         {
-            return Results.Problem(title: "Not Found", statusCode: StatusCodes.Status404NotFound);
+            return Results.Problem(title: ProblemTitles.NotFound, statusCode: StatusCodes.Status404NotFound);
         }
 
         var requestedIds = request.UserIds?.Distinct().ToList() ?? [];
@@ -270,7 +303,7 @@ public static class TeamEndpoints
         var team = await db.Teams.FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted, ct);
         if (team is null)
         {
-            return Results.Problem(title: "Not Found", statusCode: StatusCodes.Status404NotFound);
+            return Results.Problem(title: ProblemTitles.NotFound, statusCode: StatusCodes.Status404NotFound);
         }
 
         var isWorkspaceMember = await db.Memberships
@@ -278,7 +311,7 @@ public static class TeamEndpoints
         if (!isWorkspaceMember)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "User is not a member of this workspace.",
                 statusCode: StatusCodes.Status400BadRequest);
         }

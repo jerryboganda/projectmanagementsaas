@@ -30,6 +30,10 @@ public sealed class WorkspaceConfiguration : IEntityTypeConfiguration<Workspace>
             .IsDescending()
             .HasDatabaseName("ix_workspaces_created_at");
 
+        builder.HasIndex(w => w.DeletedAt)
+            .HasDatabaseName("ix_workspaces_deleted_at")
+            .HasFilter("is_deleted = true");
+
         // ── FK: Subscription (one-to-one) ──
         builder.HasOne(w => w.Subscription)
             .WithOne(s => s.Workspace)

@@ -25,6 +25,10 @@ public sealed class SprintConfiguration : IEntityTypeConfiguration<Sprint>
         builder.HasIndex(s => new { s.WorkspaceId, s.Status })
             .HasDatabaseName("ix_sprints_workspace_id_status");
 
+        builder.HasIndex(s => new { s.ProjectId, s.CreatedAt })
+            .IsDescending(false, true)
+            .HasDatabaseName("ix_sprints_project_id_created_at");
+
         // Partial unique: at most one Active sprint per project
         builder.HasIndex(s => s.ProjectId)
             .IsUnique()

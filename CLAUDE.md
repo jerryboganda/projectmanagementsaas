@@ -7,7 +7,7 @@
 - This folder is not a Git repository; worktree workflows stay blocked until the project is moved into a canonical Git clone.
 
 ## Stack
-- **Framework:** Next.js 15 + React 19 + TypeScript 5.9 (strict)
+- **Framework:** Next.js 16 + React 19 + TypeScript 6 (strict)
 - **Styling:** Tailwind CSS v4, Motion, Lucide React
 - **Charts:** Recharts
 - **Drag & Drop:** @hello-pangea/dnd
@@ -19,6 +19,7 @@ cmd /c npm run dev
 cmd /c npm run lint
 cmd /c npm run build
 cmd /c npm run typecheck
+cmd /c npm test
 cmd /c npm run clean
 dotnet restore backend/LinearPrecision.sln
 dotnet test backend/LinearPrecision.sln --no-restore
@@ -37,7 +38,7 @@ dotnet test backend/LinearPrecision.sln --no-restore
 ## Conventions
 - Most interactive surfaces are client components.
 - Feature modules follow a repeated layout/surface/toolbar/detail/data structure.
-- `contexts/app-data-context.tsx` is the closest current frontend SSOT, but project-wide runtime truth is still split.
+- `contexts/workspace-context.tsx`, TanStack Query hooks, and the typed API client are the closest current frontend runtime sources of truth; project-wide runtime truth is still split across frontend and backend.
 - Shared chokepoints must stay serialized:
   - `app/layout.tsx`
   - `app/providers.tsx`

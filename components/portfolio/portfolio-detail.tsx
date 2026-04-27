@@ -12,7 +12,6 @@ import {
   X,
   Target,
 } from "lucide-react";
-import Image from "next/image";
 import type {
   PortfolioGoalItem,
   PortfolioGoalStatus,
@@ -20,6 +19,7 @@ import type {
   PortfolioInitiativeStatus,
 } from "@/lib/portfolio/types";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface PortfolioOwnerOption {
   id: string;
@@ -136,6 +136,7 @@ export function PortfolioDetail({
   isLinkingProject = false,
   isCreatingInitiative = false,
 }: Props) {
+  const confirm = useConfirm();
   const [title, setTitle] = useState(goal.title);
   const [description, setDescription] = useState(goal.description ?? "");
   const [status, setStatus] = useState<PortfolioGoalStatus>(goal.status);
@@ -184,10 +185,13 @@ export function PortfolioDetail({
   };
 
   const handleDelete = async () => {
-    // eslint-disable-next-line no-alert
-    if (!window.confirm("Delete this goal? This action cannot be undone.")) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Delete goal",
+      message: "Delete this goal? This action cannot be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
 
     await onDelete();
     onClose();

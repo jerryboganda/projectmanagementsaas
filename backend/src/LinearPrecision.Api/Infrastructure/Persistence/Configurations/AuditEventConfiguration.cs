@@ -20,6 +20,10 @@ public sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEven
         builder.HasIndex(ae => new { ae.WorkspaceId, ae.EntityType, ae.EntityId })
             .HasDatabaseName("ix_audit_events_workspace_id_entity_type_entity_id");
 
+        builder.HasIndex(ae => new { ae.WorkspaceId, ae.Action, ae.CreatedAt })
+            .IsDescending(false, false, true)
+            .HasDatabaseName("ix_audit_events_workspace_id_action_created_at");
+
         builder.HasIndex(ae => new { ae.WorkspaceId, ae.ActorId, ae.CreatedAt })
             .IsDescending(false, false, true)
             .HasDatabaseName("ix_audit_events_workspace_id_actor_id_created_at");

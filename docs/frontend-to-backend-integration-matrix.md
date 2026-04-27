@@ -1,7 +1,7 @@
 # Frontend-to-Backend Integration Matrix — Linear Precision PM SaaS
 
 > **Status:** Draft v1.0
-> **Last updated:** 2026-03-23
+> **Last updated:** 2026-04-26
 > **Owner:** Frontend + Backend Architecture Teams
 > **Related:** `architecture.md`, `api-integration-master-plan.md`, `backend-architecture-master-plan.md`
 
@@ -23,9 +23,9 @@ This document maps every frontend page in the Next.js application to its backend
 |-------|-----------|---------|
 | API client | Typed fetch-based client today, generated client still planned | Typed request/response and workspace-aware request orchestration |
 | Server state | TanStack Query v5 | Caching, deduplication, background refetch, optimistic updates |
-| Real-time | `@microsoft/signalr` | WebSocket connections for live updates |
+| Real-time | `@microsoft/signalr` | WebSocket connections for live updates using short-lived hub-scoped JWTs |
 | Auth state | React Context | Memory-first session state, refresh orchestration, workspace context |
-| Token management | Custom `AuthProvider` | Access token injection, refresh rotation, logout, secure refresh-cookie bootstrap |
+| Token management | Custom `AuthProvider` | Access token injection, cookie-only browser refresh rotation, logout, secure refresh-cookie bootstrap |
 
 ### 2.1 TanStack Query Configuration
 
@@ -115,27 +115,36 @@ const queryKeys = {
 
 ### 4.1 Auth Pages (T0)
 
-**Current state:** Real auth and workspace bootstrap pages now exist at `/login`, `/register`, `/forgot-password`, `/reset-password`, `/workspace/select`, `/workspace/create`, and `/invitations/[token]`. Route protection and session bootstrap are wired through `AuthProvider`, `WorkspaceProvider`, and `AppShellGuard`, and the authenticated product routes now use live hooks or live providers with several subfeatures still pending deeper hardening.
+**Current state:** Real auth and workspace bootstrap pages now exist at `/login`, `/register`, `/confirm-email`, `/forgot-password`, `/reset-password`, `/workspace/select`, `/workspace/create`, and `/invitations/[token]`. Route protection and session bootstrap are wired through `AuthProvider`, `WorkspaceProvider`, and `AppShellGuard`, and the authenticated product routes now use live hooks or live providers with several subfeatures still pending deeper hardening.
 
-**Pages shipped:** `/login`, `/register`, `/forgot-password`, `/reset-password`, `/workspace/select`, `/workspace/create`, `/invitations/[token]`
+**Pages shipped:** `/login`, `/register`, `/confirm-email`, `/forgot-password`, `/reset-password`, `/workspace/select`, `/workspace/create`, `/invitations/[token]`
 
 | Data Need | API Endpoint | Query Key | Mutation |
 |-----------|-------------|-----------|----------|
 | Login | `POST /api/v1/auth/login` | — | `useLogin()` |
-| Register | `POST /api/v1/auth/register` | — | `useRegister()` |
+| Register | `POST /api/v1/auth/register` | — | `register()` returns pending email confirmation |
+| Confirm email | `POST /api/v1/auth/confirm-email` | — | `confirmEmail()` |
+| Resend confirmation | `POST /api/v1/auth/resend-confirmation` | — | `resendEmailConfirmation()` |
 | Refresh | `POST /api/v1/auth/refresh` | — | Background interceptor |
 | Logout | `POST /api/v1/auth/logout` | — | `useLogout()` |
 | Forgot password | `POST /api/v1/auth/forgot-password` | — | `useForgotPassword()` |
 | Reset password | `POST /api/v1/auth/reset-password` | — | `useResetPassword()` |
+| MFA login verify | `POST /api/v1/auth/login/verify-mfa` | — | `verifyMfaLogin()` |
+| MFA setup | `POST /api/v1/auth/mfa/setup` | — | `setupMfa({ password })` |
+| MFA setup verify | `POST /api/v1/auth/mfa/verify-setup` | — | `verifyMfaSetup()` |
+| MFA disable | `POST /api/v1/auth/mfa/disable` | — | `disableMfa()` |
+| Hub token | `POST /api/v1/users/me/hub-token` | — | `createHubToken()` |
 | Accept invitation | `POST /api/v1/invitations/{token}/accept` | — | `useAcceptInvitation()` |
 | Set active workspace | `PUT /api/v1/users/me/active-workspace` | — | `useSetActiveWorkspace()` |
 
-**SignalR:** None.
+**SignalR:** Authenticated hubs use `createHubToken()` to exchange the main access token for a 60-second, hub-scoped JWT before SignalR places a token in the WebSocket query string.
 
 **Migration notes:**
 - Root provider stack, auth UI, route guards, and workspace bootstrap pages now exist in `app/providers.tsx`
-- Access tokens are held in memory; refresh bootstrap is performed through the secure refresh cookie
-- OAuth, magic links, and 2FA remain explicitly post-GA
+- Access tokens are held in memory; browser refresh bootstrap is performed through the secure refresh cookie and browser auth responses omit `refreshToken` from JSON by default
+- New registrations create the default workspace but return a pending confirmation contract instead of an auth session; login, refresh, hub tokens, active-workspace session refresh, and invitation acceptance require a confirmed email address
+- Native/mobile clients opt in to refresh-token JSON using `X-LP-Client: mobile`; web clients do not set that header
+- TOTP MFA is shipped; OAuth, magic links, backup codes, and WebAuthn remain post-GA
 - Next work is page-level hook migration on authenticated product surfaces
 
 ---
@@ -329,13 +338,14 @@ const moveTask = useMutation({
 
 ### 4.10 Timeline — `app/timeline/page.tsx` (T3)
 
-**Current state:** Gantt-style timeline view now uses live TanStack Query data from `/api/v1/projects`, `/api/v1/tasks`, and per-project sprint queries. `components/timeline/data.ts` remains as a mapping and presentation helper, not as the source of truth.
+**Current state:** Gantt-style timeline view now uses live TanStack Query data from `/api/v1/projects`, paged `/api/v1/tasks`, and the workspace sprint batch endpoint. `components/timeline/data.ts` remains as a mapping and presentation helper, not as the source of truth.
 
 | Data Need | API Endpoint | Query Key | Cache Strategy |
 |-----------|-------------|-----------|----------------|
-| Tasks with dates | `GET /api/v1/tasks?startDate.isNull=false&pageSize=100` | `tasks.timeline` | staleTime: 60s |
+| Tasks with dates | `GET /api/v1/tasks?page={n}&pageSize=100` up to five pages | `timeline.tasks` | staleTime: 15s |
 | Dependencies | Included in task detail or separate query | `tasks.dependencies` | staleTime: 2min |
 | Projects | `GET /api/v1/projects` | `projects.list` | staleTime: 60s |
+| Sprints | `GET /api/v1/sprints?projectIds={csv}` | `timeline.sprints` | staleTime: 15s |
 
 **SignalR:** None.
 

@@ -4,7 +4,7 @@ Mixed frontend and backend repository for a project management SaaS product.
 
 ## Current State
 
-- Root app: Next.js 15 App Router frontend with 17 route pages and a substantial mock-backed MVP surface
+- Root app: Next.js 16 App Router frontend with 17 route pages and a substantial MVP surface
 - `backend/`: ASP.NET Core 9 modular monolith plus worker service, EF Core persistence, migrations, tests, SignalR, Redis, and local Docker Compose
 - Root deployment artifacts now include a production `Dockerfile` for the Next.js web app
 - The frontend is **not yet production-complete**, but the authenticated product shell now runs through live auth/workspace/query/realtime foundations and all major route surfaces use live hooks or live providers. The remaining gaps are mostly deeper subfeatures, placeholder panels, missing contracts, and broader SaaS hardening
@@ -18,9 +18,9 @@ Mixed frontend and backend repository for a project management SaaS product.
 
 ### Frontend
 
-- Next.js 15
+- Next.js 16
 - React 19
-- TypeScript
+- TypeScript 6
 - Tailwind CSS v4
 - `motion`
 - `@hello-pangea/dnd`
@@ -43,6 +43,7 @@ Mixed frontend and backend repository for a project management SaaS product.
 - Lint: `cmd /c npm run lint`
 - Build: `cmd /c npm run build`
 - Typecheck: `cmd /c npm run typecheck`
+- Test: `cmd /c npm test`
 
 ## Backend Commands
 
@@ -53,7 +54,7 @@ Mixed frontend and backend repository for a project management SaaS product.
 ## Verification Expectations
 
 - Frontend changes: lint, build, and typecheck
-- Backend changes: relevant `dotnet test` coverage, with Docker-capable integration tests when touched scope requires them
+- Backend changes: relevant `dotnet test` coverage; Docker-backed integration tests are skipped automatically when Docker is unavailable and should be run in a Docker-capable environment when touched scope requires them
 - Docs updated whenever repo architecture, behavior, or workflow changes
 
 ## Lint Debt Policy

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useAutomationsData } from "@/hooks/use-automations-data";
 import { getApiErrorMessage } from "@/lib/api/error-utils";
 import {
@@ -763,6 +764,7 @@ function AutomationDetailPanel({
 
 export function AutomationsLayout() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [search, setSearch] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [selectedAutomationId, setSelectedAutomationId] = useState<string | null>(null);
@@ -798,11 +800,15 @@ export function AutomationsLayout() {
     return map;
   }, [projects]);
 
-  useEffect(() => {
-    if (selectedAutomationId && !automations.some((automation) => automation.id === selectedAutomationId)) {
-      setSelectedAutomationId(null);
-    }
-  }, [automations, selectedAutomationId]);
+  // Clear the selected automation if it disappears (e.g. deleted by another
+  // user). Doing this during render — instead of in an effect — avoids a
+  // wasted commit and satisfies react-hooks/set-state-in-effect.
+  if (
+    selectedAutomationId &&
+    !automations.some((automation) => automation.id === selectedAutomationId)
+  ) {
+    setSelectedAutomationId(null);
+  }
 
   const tabs: { key: FilterTab; label: string; count: number }[] = useMemo(
     () => [
@@ -877,10 +883,13 @@ export function AutomationsLayout() {
   };
 
   const handleDelete = async (automation: AutomationSurfaceItem) => {
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(`Delete "${automation.name}"? This cannot be undone.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Delete automation",
+      message: `Delete "${automation.name}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
 
     try {
       await deleteAutomation(automation.id);

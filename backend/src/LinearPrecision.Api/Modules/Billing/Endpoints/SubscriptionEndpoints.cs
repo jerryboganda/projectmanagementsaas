@@ -17,19 +17,19 @@ public static class SubscriptionEndpoints
 
         group.MapGet("/", GetSubscription)
             .WithName("GetSubscription")
-            .RequireAuthorization("WorkspaceMember")
+            .RequireAuthorization(WorkspaceRoles.Member)
             .Produces<SubscriptionResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         group.MapPost("/", CreateSubscription)
             .WithName("CreateSubscription")
-            .RequireAuthorization("WorkspaceAdmin")
+            .RequireAuthorization(WorkspaceRoles.Admin)
             .Produces<SubscriptionResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest);
 
         group.MapPut("/", UpdateSubscription)
             .WithName("UpdateSubscription")
-            .RequireAuthorization("WorkspaceAdmin")
+            .RequireAuthorization(WorkspaceRoles.Admin)
             .Produces<SubscriptionResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
@@ -57,7 +57,7 @@ public static class SubscriptionEndpoints
         if (subscription is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "No subscription found for the current workspace.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -83,7 +83,7 @@ public static class SubscriptionEndpoints
         if (existing)
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: "A subscription already exists for this workspace. Use PUT to update.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -95,7 +95,7 @@ public static class SubscriptionEndpoints
         if (plan is null)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: $"Plan with id '{request.PlanId}' was not found or is inactive.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
@@ -148,7 +148,7 @@ public static class SubscriptionEndpoints
         if (subscription is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "No subscription found for the current workspace.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -160,7 +160,7 @@ public static class SubscriptionEndpoints
         if (plan is null)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: $"Plan with id '{request.PlanId}' was not found or is inactive.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
@@ -202,7 +202,7 @@ public static class SubscriptionEndpoints
         if (subscription is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "No subscription found for the current workspace.",
                 statusCode: StatusCodes.Status404NotFound);
         }

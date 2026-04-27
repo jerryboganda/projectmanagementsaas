@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTimeTrackingData, type TimeTrackingEntry } from "@/hooks/use-time-tracking-data";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 // ============================================================
 // TYPES
@@ -346,6 +347,9 @@ export function TimeTrackingLayout() {
                 setProjectDropdownOpen(false);
                 setShowCustomPicker(false);
               }}
+              aria-haspopup="menu"
+              aria-expanded={dateDropdownOpen}
+              aria-label="Date range filter"
               className="h-8 px-3 flex items-center gap-2 text-[13px] text-slate-300 bg-white/[0.04] border border-neutral-border rounded-sm hover:bg-white/[0.07] transition-colors"
             >
               <Calendar className="size-3.5 text-slate-500" />
@@ -442,6 +446,9 @@ export function TimeTrackingLayout() {
                 setDateDropdownOpen(false);
                 setProjectDropdownOpen(false);
               }}
+              aria-haspopup="menu"
+              aria-expanded={memberDropdownOpen}
+              aria-label="Member filter"
               className="h-8 px-3 flex items-center gap-2 text-[13px] text-slate-300 bg-white/[0.04] border border-neutral-border rounded-sm hover:bg-white/[0.07] transition-colors"
             >
               <Users className="size-3.5 text-slate-500" />
@@ -474,6 +481,9 @@ export function TimeTrackingLayout() {
                 setDateDropdownOpen(false);
                 setMemberDropdownOpen(false);
               }}
+              aria-haspopup="menu"
+              aria-expanded={projectDropdownOpen}
+              aria-label="Project filter"
               className="h-8 px-3 flex items-center gap-2 text-[13px] text-slate-300 bg-white/[0.04] border border-neutral-border rounded-sm hover:bg-white/[0.07] transition-colors"
             >
               <FileText className="size-3.5 text-slate-500" />
@@ -912,14 +922,34 @@ function TimerWidget({
   const [showTaskDropdown, setShowTaskDropdown] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
 
-  // Sync task from timer state when it changes externally
-  useEffect(() => {
+  // Sync task from timer state when it changes externally. Compare during
+  // render and reset synchronously (React-recommended for resetting state on
+  // prop change — see useState docs "Storing information from previous
+  // renders").
+  const [prevTimerSnapshot, setPrevTimerSnapshot] = useState({
+    state: timer.state,
+    taskId: timer.taskId,
+    description: timer.description,
+    isBillable: timer.isBillable,
+  });
+  if (
+    prevTimerSnapshot.state !== timer.state ||
+    prevTimerSnapshot.taskId !== timer.taskId ||
+    prevTimerSnapshot.description !== timer.description ||
+    prevTimerSnapshot.isBillable !== timer.isBillable
+  ) {
+    setPrevTimerSnapshot({
+      state: timer.state,
+      taskId: timer.taskId,
+      description: timer.description,
+      isBillable: timer.isBillable,
+    });
     if (timer.state !== "idle") {
       setTaskId(timer.taskId ?? "");
       setDescription(timer.description ?? "");
       setIsBillable(timer.isBillable ?? false);
     }
-  }, [timer.state, timer.taskId, timer.description, timer.isBillable]);
+  }
 
   const selectedTask = tasks.find((t) => t.id === taskId);
   const autoProject = selectedTask?.projectId
@@ -1300,6 +1330,7 @@ function InlineEntryRow({
   onUpdate,
   onDelete,
 }: InlineEntryRowProps) {
+  const confirm = useConfirm();
   const [editingHours, setEditingHours] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
   const [hoursVal, setHoursVal] = useState(entry.hours.toString());
@@ -1473,8 +1504,13 @@ function InlineEntryRow({
         <button
           onClick={async (e) => {
             e.stopPropagation();
-            // eslint-disable-next-line no-alert
-            if (!window.confirm("Delete this time entry?")) return;
+            const ok = await confirm({
+              title: "Delete time entry",
+              message: "Delete this time entry?",
+              confirmLabel: "Delete",
+              tone: "danger",
+            });
+            if (!ok) return;
             await onDelete();
           }}
           disabled={isDeleting}
@@ -1523,12 +1559,15 @@ function TimesheetCell({
     }
   }, [editing]);
 
-  // Reset input value when hours change from outside
-  useEffect(() => {
+  // Reset input value when hours change from outside. Compare during render
+  // so we don't paint the stale value first.
+  const [prevHours, setPrevHours] = useState(hours);
+  if (prevHours !== hours) {
+    setPrevHours(hours);
     if (!editing) {
       setInputVal(hours > 0 ? hours.toString() : "");
     }
-  }, [hours, editing]);
+  }
 
   const handleClick = () => {
     setInputVal(hours > 0 ? hours.toString() : "");

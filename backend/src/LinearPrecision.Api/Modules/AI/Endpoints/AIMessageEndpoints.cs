@@ -10,6 +10,8 @@ namespace LinearPrecision.Api.Modules.AI.Endpoints;
 
 public static class AIMessageEndpoints
 {
+    private const int ChatHistoryMessageLimit = 40;
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/ai/conversations/{conversationId:guid}/messages")
@@ -19,7 +21,7 @@ public static class AIMessageEndpoints
         group.MapPost("/", SendMessage)
             .WithName("SendAIMessage")
             .Produces<MessageResponse>(StatusCodes.Status201Created)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── POST /api/v1/ai/conversations/{conversationId}/messages ──
@@ -51,7 +53,7 @@ public static class AIMessageEndpoints
         if (conversation is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Conversation with id '{conversationId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -78,13 +80,17 @@ public static class AIMessageEndpoints
         conversation.MessageCount++;
         await db.SaveChangesAsync(ct);
 
-        var history = await db.AIMessages.AsNoTracking()
+        var history = (await db.AIMessages.AsNoTracking()
             .Where(message => message.ConversationId == conversationId)
-            .OrderBy(message => message.CreatedAt)
+            .OrderByDescending(message => message.CreatedAt)
+            .Take(ChatHistoryMessageLimit)
             .Select(message => new AIChatMessageInput(
                 ToProviderRole(message.Role),
                 message.Content))
-            .ToListAsync(ct);
+            .ToListAsync(ct))
+            .AsEnumerable()
+            .Reverse()
+            .ToList();
 
         AIChatCompletionResult completion;
         try

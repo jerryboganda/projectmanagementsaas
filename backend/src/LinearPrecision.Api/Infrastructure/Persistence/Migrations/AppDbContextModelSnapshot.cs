@@ -319,6 +319,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_audit_events_created_at");
 
+                    b.HasIndex("WorkspaceId", "Action", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_audit_events_workspace_id_action_created_at");
+
                     b.HasIndex("WorkspaceId", "ActorId", "CreatedAt")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_audit_events_workspace_id_actor_id_created_at");
@@ -681,6 +685,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatorId")
                         .HasDatabaseName("ix_documents_creator_id");
 
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_documents_deleted_at")
+                        .HasFilter("is_deleted = true");
+
                     b.HasIndex("DeletedBy")
                         .HasDatabaseName("ix_documents_deleted_by");
 
@@ -698,6 +706,13 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("WorkspaceId", "ProjectId")
                         .HasDatabaseName("ix_documents_workspace_id_project_id");
+
+                    b.HasIndex("ParentDocumentId", "IsDeleted", "SortOrder")
+                        .HasDatabaseName("ix_documents_parent_document_id_is_deleted_sort_order");
+
+                    b.HasIndex("WorkspaceId", "ProjectId", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_documents_workspace_id_project_id_created_at");
 
                     b.ToTable("documents", (string)null);
                 });
@@ -936,6 +951,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedBy")
                         .HasDatabaseName("ix_goals_created_by");
 
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_goals_deleted_at")
+                        .HasFilter("is_deleted = true");
+
                     b.HasIndex("DeletedBy")
                         .HasDatabaseName("ix_goals_deleted_by");
 
@@ -948,6 +967,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("UpdatedBy")
                         .HasDatabaseName("ix_goals_updated_by");
 
+                    b.HasIndex("WorkspaceId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_goals_workspace_id_created_at");
+
                     b.HasIndex("WorkspaceId", "IsDeleted")
                         .HasDatabaseName("ix_goals_workspace_id_is_deleted");
 
@@ -956,6 +979,9 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("WorkspaceId", "Status")
                         .HasDatabaseName("ix_goals_workspace_id_status");
+
+                    b.HasIndex("WorkspaceId", "Title")
+                        .HasDatabaseName("ix_goals_workspace_id_title");
 
                     b.ToTable("goals", (string)null);
                 });
@@ -1088,6 +1114,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedBy")
                         .HasDatabaseName("ix_initiatives_created_by");
+
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_initiatives_deleted_at")
+                        .HasFilter("is_deleted = true");
 
                     b.HasIndex("DeletedBy")
                         .HasDatabaseName("ix_initiatives_deleted_by");
@@ -1240,6 +1270,9 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("Token")
                         .IsUnique()
                         .HasDatabaseName("ix_invitations_token");
+
+                    b.HasIndex("Status", "ExpiresAt")
+                        .HasDatabaseName("ix_invitations_status_expires_at");
 
                     b.HasIndex("WorkspaceId", "Email", "Status")
                         .HasDatabaseName("ix_invitations_workspace_id_email_status");
@@ -1406,6 +1439,15 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("WorkspaceId")
                         .HasDatabaseName("ix_notifications_workspace_id");
 
+                    b.HasIndex("RecipientId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_notifications_recipient_unread_email_unsent_created_at")
+                        .HasFilter("is_read = false AND email_sent = false");
+
+                    b.HasIndex("RecipientId", "IsArchived", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_notifications_recipient_id_is_archived_created_at");
+
                     b.HasIndex("RecipientId", "IsRead", "CreatedAt")
                         .IsDescending(false, false, true)
                         .HasDatabaseName("ix_notifications_recipient_id_is_read_created_at");
@@ -1462,6 +1504,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_notification_preferences");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_notification_preferences_user_id_email_enabled")
+                        .HasFilter("email = true");
 
                     b.HasIndex("WorkspaceId")
                         .HasDatabaseName("ix_notification_preferences_workspace_id");
@@ -1689,6 +1735,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedBy")
                         .HasDatabaseName("ix_projects_created_by");
 
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_projects_deleted_at")
+                        .HasFilter("is_deleted = true");
+
                     b.HasIndex("DeletedBy")
                         .HasDatabaseName("ix_projects_deleted_by");
 
@@ -1705,6 +1755,12 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("WorkspaceId", "IsDeleted")
                         .HasDatabaseName("ix_projects_workspace_id_is_deleted");
+
+                    b.HasIndex("WorkspaceId", "Name")
+                        .HasDatabaseName("ix_projects_workspace_id_name");
+
+                    b.HasIndex("WorkspaceId", "SortOrder")
+                        .HasDatabaseName("ix_projects_workspace_id_sort_order");
 
                     b.HasIndex("WorkspaceId", "Status")
                         .HasDatabaseName("ix_projects_workspace_id_status");
@@ -1907,6 +1963,9 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("UpdatedBy")
                         .HasDatabaseName("ix_request_forms_updated_by");
 
+                    b.HasIndex("Slug", "IsActive")
+                        .HasDatabaseName("ix_request_forms_slug_is_active");
+
                     b.HasIndex("WorkspaceId", "IsActive")
                         .HasDatabaseName("ix_request_forms_workspace_id_is_active");
 
@@ -1997,6 +2056,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("RequestFormId", "Status")
                         .HasDatabaseName("ix_request_submissions_request_form_id_status");
 
+                    b.HasIndex("WorkspaceId", "Status", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_request_submissions_workspace_id_status_created_at");
+
                     b.ToTable("request_submissions", (string)null);
                 });
 
@@ -2079,6 +2142,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UpdatedBy")
                         .HasDatabaseName("ix_sprints_updated_by");
+
+                    b.HasIndex("ProjectId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_sprints_project_id_created_at");
 
                     b.HasIndex("WorkspaceId", "Status")
                         .HasDatabaseName("ix_sprints_workspace_id_status");
@@ -2281,6 +2348,9 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("WorkspaceId")
                         .HasDatabaseName("ix_task_checklist_items_workspace_id");
 
+                    b.HasIndex("TaskId", "IsCompleted")
+                        .HasDatabaseName("ix_task_checklist_items_task_id_is_completed");
+
                     b.HasIndex("TaskId", "SortOrder")
                         .HasDatabaseName("ix_task_checklist_items_task_id_sort_order");
 
@@ -2363,6 +2433,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedBy")
                         .HasDatabaseName("ix_task_comments_created_by");
+
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_task_comments_deleted_at")
+                        .HasFilter("is_deleted = true");
 
                     b.HasIndex("DeletedBy")
                         .HasDatabaseName("ix_task_comments_deleted_by");
@@ -2576,6 +2650,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatorId")
                         .HasDatabaseName("ix_task_items_creator_id");
 
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_task_items_deleted_at")
+                        .HasFilter("is_deleted = true");
+
                     b.HasIndex("DeletedBy")
                         .HasDatabaseName("ix_task_items_deleted_by");
 
@@ -2606,6 +2684,14 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("WorkspaceId", "SprintId")
                         .HasDatabaseName("ix_task_items_workspace_id_sprint_id");
+
+                    b.HasIndex("WorkspaceId", "AssigneeId", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_task_items_workspace_id_assignee_id_created_at");
+
+                    b.HasIndex("WorkspaceId", "ProjectId", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_task_items_workspace_id_project_id_created_at");
 
                     b.HasIndex("WorkspaceId", "ProjectId", "SortOrder")
                         .HasDatabaseName("ix_task_items_workspace_id_project_id_sort_order");
@@ -2651,6 +2737,9 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("WorkspaceId")
                         .HasDatabaseName("ix_task_watchers_workspace_id");
+
+                    b.HasIndex("TaskId", "CreatedAt")
+                        .HasDatabaseName("ix_task_watchers_task_id_created_at");
 
                     b.HasIndex("TaskId", "UserId")
                         .IsUnique()
@@ -2853,6 +2942,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProjectId")
                         .HasDatabaseName("ix_time_entries_project_id");
 
+                    b.HasIndex("StartTime")
+                        .HasDatabaseName("ix_time_entries_start_time_running")
+                        .HasFilter("end_time IS NULL");
+
                     b.HasIndex("TaskId")
                         .HasDatabaseName("ix_time_entries_task_id");
 
@@ -2920,6 +3013,7 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
                         .HasName("pk_usage_records");
 
                     b.HasIndex("WorkspaceId", "MetricName", "Period")
+                        .IsUnique()
                         .HasDatabaseName("ix_usage_records_workspace_id_metric_name_period");
 
                     b.ToTable("usage_records", (string)null);
@@ -3153,6 +3247,10 @@ namespace LinearPrecision.Api.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedBy")
                         .HasDatabaseName("ix_workspaces_created_by");
+
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_workspaces_deleted_at")
+                        .HasFilter("is_deleted = true");
 
                     b.HasIndex("DeletedBy")
                         .HasDatabaseName("ix_workspaces_deleted_by");

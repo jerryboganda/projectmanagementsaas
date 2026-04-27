@@ -181,7 +181,7 @@ public class AppDbContext : IdentityDbContext<User, IdentityRole<Guid>, Guid>
     /// <summary>
     /// Applies a soft-delete query filter for global (non-tenant) entities.
     /// </summary>
-    private void ApplySoftDeleteFilter<TEntity>(ModelBuilder builder)
+    private static void ApplySoftDeleteFilter<TEntity>(ModelBuilder builder)
         where TEntity : BaseEntity, ISoftDeletable
     {
         builder.Entity<TEntity>()

@@ -9,9 +9,10 @@ using LinearPrecision.Worker.Jobs;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using StackExchange.Redis;
+using System.Globalization;
 
 Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console()
+    .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
     .CreateLogger();
 
 try

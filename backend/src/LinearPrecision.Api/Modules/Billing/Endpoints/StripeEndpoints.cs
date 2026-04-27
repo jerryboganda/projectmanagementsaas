@@ -18,13 +18,13 @@ public static class StripeEndpoints
 
         group.MapPost("/checkout", CreateCheckoutSession)
             .WithName("CreateCheckoutSession")
-            .RequireAuthorization("WorkspaceAdmin")
+            .RequireAuthorization(WorkspaceRoles.Admin)
             .Produces<CheckoutSessionResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest);
 
         group.MapPost("/portal", CreatePortalSession)
             .WithName("CreateBillingPortalSession")
-            .RequireAuthorization("WorkspaceAdmin")
+            .RequireAuthorization(WorkspaceRoles.Admin)
             .Produces<PortalSessionResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest);
 
@@ -51,7 +51,7 @@ public static class StripeEndpoints
         if (plan is null)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: $"Plan with id '{request.PlanId}' was not found or is inactive.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
@@ -147,7 +147,7 @@ public static class StripeEndpoints
         if (subscription?.StripeCustomerId is null)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "No Stripe customer found for this workspace. Create a subscription first.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
@@ -185,30 +185,30 @@ public static class StripeEndpoints
         catch (StripeException)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "Invalid Stripe webhook signature.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
         switch (stripeEvent.Type)
         {
-            case Stripe.Events.CheckoutSessionCompleted:
+            case EventTypes.CheckoutSessionCompleted:
                 await HandleCheckoutCompleted(stripeEvent, db, ct);
                 break;
 
-            case Stripe.Events.InvoicePaid:
+            case EventTypes.InvoicePaid:
                 await HandleInvoicePaid(stripeEvent, db, ct);
                 break;
 
-            case Stripe.Events.InvoicePaymentFailed:
+            case EventTypes.InvoicePaymentFailed:
                 await HandleInvoicePaymentFailed(stripeEvent, db, ct);
                 break;
 
-            case Stripe.Events.CustomerSubscriptionUpdated:
+            case EventTypes.CustomerSubscriptionUpdated:
                 await HandleSubscriptionUpdated(stripeEvent, db, ct);
                 break;
 
-            case Stripe.Events.CustomerSubscriptionDeleted:
+            case EventTypes.CustomerSubscriptionDeleted:
                 await HandleSubscriptionDeleted(stripeEvent, db, ct);
                 break;
         }
@@ -276,10 +276,11 @@ public static class StripeEndpoints
     private static async Task HandleInvoicePaid(Event stripeEvent, AppDbContext db, CancellationToken ct)
     {
         var invoice = stripeEvent.Data.Object as Invoice;
-        if (invoice?.SubscriptionId is null) return;
+        var stripeSubscriptionId = GetInvoiceSubscriptionId(invoice);
+        if (stripeSubscriptionId is null) return;
 
         var subscription = await db.Subscriptions
-            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == invoice.SubscriptionId, ct);
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscriptionId, ct);
 
         if (subscription is null) return;
 
@@ -291,10 +292,11 @@ public static class StripeEndpoints
     private static async Task HandleInvoicePaymentFailed(Event stripeEvent, AppDbContext db, CancellationToken ct)
     {
         var invoice = stripeEvent.Data.Object as Invoice;
-        if (invoice?.SubscriptionId is null) return;
+        var stripeSubscriptionId = GetInvoiceSubscriptionId(invoice);
+        if (stripeSubscriptionId is null) return;
 
         var subscription = await db.Subscriptions
-            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == invoice.SubscriptionId, ct);
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscriptionId, ct);
 
         if (subscription is null) return;
 
@@ -313,13 +315,21 @@ public static class StripeEndpoints
 
         if (subscription is null) return;
 
-        subscription.CurrentPeriodStart = stripeSub.CurrentPeriodStart;
-        subscription.CurrentPeriodEnd = stripeSub.CurrentPeriodEnd;
+        var currentItem = stripeSub.Items?.Data?.FirstOrDefault();
+        if (currentItem is not null)
+        {
+            subscription.CurrentPeriodStart = currentItem.CurrentPeriodStart;
+            subscription.CurrentPeriodEnd = currentItem.CurrentPeriodEnd;
+        }
+
         subscription.Status = MapStripeStatus(stripeSub.Status);
         subscription.CancelledAt = stripeSub.CanceledAt;
         subscription.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
     }
+
+    private static string? GetInvoiceSubscriptionId(Invoice? invoice) =>
+        invoice?.Parent?.SubscriptionDetails?.SubscriptionId;
 
     private static async Task HandleSubscriptionDeleted(Event stripeEvent, AppDbContext db, CancellationToken ct)
     {

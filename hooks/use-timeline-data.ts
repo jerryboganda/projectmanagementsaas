@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { useWorkspace } from "@/contexts/workspace-context";
 import type {
@@ -241,9 +241,12 @@ function timelineProjectsQueryKey(workspaceId: string | null) {
   return ["timeline", workspaceId, "projects"] as const;
 }
 
-function timelineSprintsQueryKey(workspaceId: string | null, projectId: string) {
-  return ["timeline", workspaceId, "sprints", projectId] as const;
+function timelineSprintsQueryKey(workspaceId: string | null, projectIds: readonly string[]) {
+  return ["timeline", workspaceId, "sprints", projectIds] as const;
 }
+
+const TIMELINE_TASK_PAGE_SIZE = 100;
+const TIMELINE_TASK_MAX_PAGES = 5;
 
 export function useTimelineData() {
   const { apiClient, session } = useAuth();
@@ -256,6 +259,7 @@ export function useTimelineData() {
     staleTime: 30_000,
     queryFn: async () =>
       apiClient.listProjects({
+        page: 1,
         pageSize: 100,
         sortBy: "updatedAt",
         sortOrder: "desc",
@@ -266,40 +270,51 @@ export function useTimelineData() {
     queryKey: ["timeline", activeWorkspaceId, "tasks"],
     enabled: !!activeWorkspaceId,
     staleTime: 15_000,
-    queryFn: async () =>
-      apiClient.listTasks({
-        pageSize: 500,
-        sortBy: "updatedAt",
-        sortOrder: "desc",
-      }),
+    queryFn: async () => {
+      const taskPages: TaskResponse[][] = [];
+
+      for (let page = 1; page <= TIMELINE_TASK_MAX_PAGES; page += 1) {
+        const pageTasks = await apiClient.listTasks({
+          page,
+          pageSize: TIMELINE_TASK_PAGE_SIZE,
+          sortBy: "updatedAt",
+          sortOrder: "desc",
+        });
+
+        taskPages.push(pageTasks);
+
+        if (pageTasks.length < TIMELINE_TASK_PAGE_SIZE) {
+          break;
+        }
+      }
+
+      return taskPages.flat();
+    },
   });
 
   const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
+  const projectIds = useMemo(() => projects.map((project) => project.id).sort(), [projects]);
+  const shouldLoadSprints = !!activeWorkspaceId && projectsQuery.isSuccess && projectIds.length > 0;
 
-  const sprintQueries = useQueries({
-    queries: projects.map((project) => ({
-      queryKey: ["timeline", activeWorkspaceId, "sprints", project.id],
-      enabled: !!activeWorkspaceId && projectsQuery.isSuccess,
-      staleTime: 15_000,
-      queryFn: async () => apiClient.listSprints(project.id),
-    })),
+  const sprintsQuery = useQuery<SprintResponse[]>({
+    queryKey: timelineSprintsQueryKey(activeWorkspaceId, projectIds),
+    enabled: shouldLoadSprints,
+    staleTime: 15_000,
+    queryFn: async () => apiClient.listSprintsBatch(projectIds),
   });
 
   const sprintsByProjectId = useMemo(() => {
     const map = new Map<string, SprintResponse[]>();
 
-    sprintQueries.forEach((query, index) => {
-      const project = projects[index];
-      if (!project || !query.data) {
-        return;
-      }
-
-      map.set(project.id, query.data);
-    });
+    for (const sprint of sprintsQuery.data ?? []) {
+      const projectSprints = map.get(sprint.projectId) ?? [];
+      projectSprints.push(sprint);
+      map.set(sprint.projectId, projectSprints);
+    }
 
     return map;
-  }, [projects, sprintQueries]);
+  }, [sprintsQuery.data]);
 
   const sprintLookup = useMemo(() => {
     const map = new Map<string, SprintResponse>();
@@ -317,17 +332,42 @@ export function useTimelineData() {
     return new Map(projects.map((project) => [project.id, project] as const));
   }, [projects]);
 
+  const tasksByProjectId = useMemo(() => {
+    const map = new Map<string, TaskResponse[]>();
+
+    for (const task of tasks) {
+      const projectTasks = map.get(task.projectId) ?? [];
+      projectTasks.push(task);
+      map.set(task.projectId, projectTasks);
+    }
+
+    return map;
+  }, [tasks]);
+
+  const tasksBySprintId = useMemo(() => {
+    const map = new Map<string, TaskResponse[]>();
+
+    for (const task of tasks) {
+      if (!task.sprintId) continue;
+      const sprintTasks = map.get(task.sprintId) ?? [];
+      sprintTasks.push(task);
+      map.set(task.sprintId, sprintTasks);
+    }
+
+    return map;
+  }, [tasks]);
+
   const timelineItems = useMemo(() => {
     const items: TimelineItem[] = [];
 
     for (const project of projects) {
-      const projectTasks = tasks.filter((task) => task.projectId === project.id);
+      const projectTasks = tasksByProjectId.get(project.id) ?? [];
       const projectSprints = sprintsByProjectId.get(project.id) ?? [];
 
       items.push(buildProjectTimelineItem(project, projectTasks, projectSprints));
 
       for (const sprint of projectSprints) {
-        const sprintTasks = projectTasks.filter((task) => task.sprintId === sprint.id);
+        const sprintTasks = tasksBySprintId.get(sprint.id) ?? [];
         items.push(buildSprintTimelineItem(sprint, project, sprintTasks));
       }
 
@@ -338,45 +378,39 @@ export function useTimelineData() {
     }
 
     return sortTimelineItems(items);
-  }, [projects, sprintLookup, sprintsByProjectId, tasks]);
+  }, [projects, sprintLookup, sprintsByProjectId, tasksByProjectId, tasksBySprintId]);
 
   const assigneeOptions = useMemo(() => {
     return mergeTimelineAssignees(timelineItems);
   }, [timelineItems]);
 
   const coreError = projectsQuery.error ?? tasksQuery.error ?? null;
-  const sprintErrors = sprintQueries
-    .map((query) => query.error)
-    .filter((error): error is Error => error instanceof Error);
+  const sprintError = sprintsQuery.error instanceof Error ? sprintsQuery.error : null;
 
   const warning =
-    !coreError && sprintErrors.length > 0
+    !coreError && sprintError
       ? {
           message:
             "Some sprint data could not be loaded. The timeline is still showing live tasks and projects.",
         }
       : null;
 
-  const allSprintQueriesSettled = sprintQueries.every(
-    (query) => query.isSuccess || query.isError || !projectsQuery.isSuccess,
-  );
-
   const isLoading =
     !activeWorkspaceId ||
     projectsQuery.isLoading ||
     tasksQuery.isLoading ||
-    (projectsQuery.isSuccess && tasksQuery.isSuccess && !allSprintQueriesSettled);
+    (shouldLoadSprints && sprintsQuery.isLoading);
 
   const isFetching =
     projectsQuery.isFetching ||
     tasksQuery.isFetching ||
-    sprintQueries.some((query) => query.isFetching);
+    sprintsQuery.isFetching;
 
   const refreshTimeline = async () => {
     await Promise.all([
       projectsQuery.refetch(),
       tasksQuery.refetch(),
-      ...sprintQueries.map((query) => query.refetch()),
+      ...(shouldLoadSprints ? [sprintsQuery.refetch()] : []),
     ]);
   };
 
@@ -444,13 +478,8 @@ export function useTimelineData() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: timelineTasksQueryKey(activeWorkspaceId) }),
         queryClient.invalidateQueries({ queryKey: timelineProjectsQueryKey(activeWorkspaceId) }),
+        queryClient.invalidateQueries({ queryKey: timelineSprintsQueryKey(activeWorkspaceId, projectIds) }),
       ]);
-      // Also invalidate sprint queries for all projects
-      projects.forEach((project) => {
-        void queryClient.invalidateQueries({
-          queryKey: timelineSprintsQueryKey(activeWorkspaceId, project.id),
-        });
-      });
     },
   });
 
@@ -479,7 +508,7 @@ export function useTimelineData() {
     selectedWorkspace,
     projectsQuery,
     tasksQuery,
-    sprintQueries,
+    sprintQueries: shouldLoadSprints ? [sprintsQuery] : [],
     timelineItems,
     assigneeOptions,
     statusOptions: TIMELINE_STATUS_OPTIONS,

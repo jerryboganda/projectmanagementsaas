@@ -18,12 +18,12 @@ public static class TaskEndpoints
             .WithTags("Tasks")
             .RequireAuthorization();
 
-        group.MapGet("/", ListTasks).WithName("ListTasks").RequireAuthorization("WorkspaceGuest");
-        group.MapPost("/", CreateTask).WithName("CreateTask").RequireAuthorization("WorkspaceMember");
-        group.MapGet("/{id:guid}", GetTask).WithName("GetTask").RequireAuthorization("WorkspaceGuest");
-        group.MapPut("/{id:guid}", UpdateTask).WithName("UpdateTask").RequireAuthorization("WorkspaceMember");
-        group.MapPatch("/{id:guid}/status", UpdateTaskStatus).WithName("UpdateTaskStatus").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{id:guid}", DeleteTask).WithName("DeleteTask").RequireAuthorization("WorkspaceMember");
+        group.MapGet("/", ListTasks).WithName("ListTasks").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapPost("/", CreateTask).WithName("CreateTask").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapGet("/{id:guid}", GetTask).WithName("GetTask").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapPut("/{id:guid}", UpdateTask).WithName("UpdateTask").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPatch("/{id:guid}/status", UpdateTaskStatus).WithName("UpdateTaskStatus").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{id:guid}", DeleteTask).WithName("DeleteTask").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── GET /api/v1/tasks ──
@@ -36,9 +36,12 @@ public static class TaskEndpoints
         string? status = null,
         string? priority = null,
         int pageSize = 25,
+        int page = 1,
         string sortBy = "createdAt",
         string sortOrder = "desc")
     {
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
+        var offset = (int)Math.Min((long)(Math.Max(page, 1) - 1) * effectivePageSize, int.MaxValue);
         var query = db.TaskItems.AsNoTracking().AsQueryable();
 
         if (projectId.HasValue) query = query.Where(t => t.ProjectId == projectId.Value);
@@ -59,7 +62,7 @@ public static class TaskEndpoints
             _ => sortOrder == "asc" ? query.OrderBy(t => t.CreatedAt) : query.OrderByDescending(t => t.CreatedAt)
         };
 
-        var tasks = await query.Take(Math.Min(pageSize, 100))
+        var tasks = await query.Skip(offset).Take(effectivePageSize)
             .Select(t => new TaskResponse(
                 t.Id,
                 t.ProjectId,
@@ -120,7 +123,7 @@ public static class TaskEndpoints
         if (project is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Project was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -204,7 +207,7 @@ public static class TaskEndpoints
         if (task is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Task with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -230,7 +233,7 @@ public static class TaskEndpoints
         if (task is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Task with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -283,7 +286,7 @@ public static class TaskEndpoints
         if (task is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Task with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -315,7 +318,7 @@ public static class TaskEndpoints
         if (task is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Task with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

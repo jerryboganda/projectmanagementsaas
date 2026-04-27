@@ -31,5 +31,20 @@ backend/**/obj/
 
 # Dev logs
 *.pid
+
+# Android build artifacts
+*.apk
 LinearPrecision-debug.apk
 MOBILE-APK-README.md
+
+# Mobile (Capacitor) build outputs
+mobile/dist/
+mobile/android/app/build/
+mobile/android/app/src/main/assets/public/
+mobile/ios/App/App/public/
+
+# Repo scratch reports (regenerated on demand)
+knip-report.json
+unused-exports.json
+unused-trim.json
+verify-results.json

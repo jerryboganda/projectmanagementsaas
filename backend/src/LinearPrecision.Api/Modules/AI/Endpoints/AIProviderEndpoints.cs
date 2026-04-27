@@ -18,17 +18,17 @@ public static class AIProviderEndpoints
         group.MapGet("/", GetProvider)
             .WithName("GetAIProvider")
             .Produces<AIProviderSettingsResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapPut("/", UpsertProvider)
             .WithName("UpsertAIProvider")
             .Produces<AIProviderSettingsResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapDelete("/", DeleteProvider)
             .WithName("DeleteAIProvider")
             .Produces(StatusCodes.Status204NoContent)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
     }
 
     private static async Task<IResult> GetProvider(

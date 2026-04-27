@@ -9,31 +9,42 @@ namespace LinearPrecision.Api.Modules.Intake.Endpoints;
 
 public static class RequestFormEndpoints
 {
+    private const int DefaultPageSize = 100;
+    private const int MaxPageSize = 250;
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/request-forms")
             .WithTags("Intake")
             .RequireAuthorization();
 
-        group.MapGet("/", ListForms).WithName("ListRequestForms").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/", CreateForm).WithName("CreateRequestForm").RequireAuthorization("WorkspaceAdmin");
-        group.MapPut("/{id:guid}", UpdateForm).WithName("UpdateRequestForm").RequireAuthorization("WorkspaceAdmin");
-        group.MapDelete("/{id:guid}", DeleteForm).WithName("DeleteRequestForm").RequireAuthorization("WorkspaceAdmin");
+        group.MapGet("/", ListForms).WithName("ListRequestForms").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/", CreateForm).WithName("CreateRequestForm").RequireAuthorization(WorkspaceRoles.Admin);
+        group.MapPut("/{id:guid}", UpdateForm).WithName("UpdateRequestForm").RequireAuthorization(WorkspaceRoles.Admin);
+        group.MapDelete("/{id:guid}", DeleteForm).WithName("DeleteRequestForm").RequireAuthorization(WorkspaceRoles.Admin);
     }
 
     // ── GET /api/v1/request-forms ──
     private static async Task<IResult> ListForms(
         AppDbContext db,
         CancellationToken ct,
-        bool? isActive = null)
+        bool? isActive = null,
+        int page = 1,
+        int pageSize = DefaultPageSize)
     {
         var query = db.RequestForms.AsNoTracking().AsQueryable();
 
         if (isActive.HasValue)
             query = query.Where(f => f.IsActive == isActive.Value);
 
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var forms = await query
             .OrderByDescending(f => f.CreatedAt)
+            .ThenBy(f => f.Title)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(f => new RequestFormResponse(
                 f.Id,
                 f.Title,
@@ -137,7 +148,7 @@ public static class RequestFormEndpoints
         if (form is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Request form with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -188,7 +199,7 @@ public static class RequestFormEndpoints
         if (form is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Request form with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

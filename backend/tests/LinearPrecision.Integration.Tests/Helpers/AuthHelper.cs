@@ -1,6 +1,10 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using LinearPrecision.Api.Entities;
 using LinearPrecision.Api.Modules.Identity.Models;
+using LinearPrecision.Integration.Tests.Fixtures;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LinearPrecision.Integration.Tests.Helpers;
 
@@ -10,6 +14,7 @@ namespace LinearPrecision.Integration.Tests.Helpers;
 public static class AuthHelper
 {
     public static async Task<(HttpClient Client, AuthSessionResponse Session)> CreateAuthenticatedClientAsync(
+        ApiFixture fixture,
         HttpClient client,
         string email = "test@example.com",
         string password = "Password1",
@@ -20,8 +25,9 @@ public static class AuthHelper
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         registerResponse.EnsureSuccessStatusCode();
 
-        var session = await registerResponse.Content.ReadFromJsonAsync<AuthSessionResponse>();
-        if (session is null) throw new InvalidOperationException("Failed to deserialize auth session response");
+        await ConfirmEmailAsync(fixture, client, email);
+
+        var session = await LoginAsync(client, email, password);
 
         // Attach JWT to client
         client.DefaultRequestHeaders.Authorization =
@@ -39,12 +45,38 @@ public static class AuthHelper
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", loginRequest);
         response.EnsureSuccessStatusCode();
 
-        var session = await response.Content.ReadFromJsonAsync<AuthSessionResponse>();
-        if (session is null) throw new InvalidOperationException("Failed to deserialize auth session response");
+        var sessionBody = await response.Content.ReadFromJsonAsync<AuthSessionBodyResponse>();
+        if (sessionBody is null) throw new InvalidOperationException("Failed to deserialize auth session response");
+
+        var session = new AuthSessionResponse(
+            sessionBody.AccessToken,
+            string.Empty,
+            sessionBody.ExpiresIn,
+            sessionBody.TokenType,
+            sessionBody.User,
+            sessionBody.ActiveWorkspaceId,
+            sessionBody.Workspaces);
 
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", session.AccessToken);
 
         return session;
+    }
+
+    public static async Task ConfirmEmailAsync(
+        ApiFixture fixture,
+        HttpClient client,
+        string email)
+    {
+        await using var scope = fixture.Services.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+        var user = await userManager.FindByEmailAsync(email)
+            ?? throw new InvalidOperationException($"User '{email}' was not found.");
+
+        var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/confirm-email",
+            new ConfirmEmailRequest(email, token));
+        response.EnsureSuccessStatusCode();
     }
 }

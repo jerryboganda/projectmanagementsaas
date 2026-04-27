@@ -17,7 +17,7 @@ public static class AutomationLogEndpoints
         group.MapGet("/", ListLogs)
             .WithName("ListAutomationLogs")
             .Produces<List<AutomationLogResponse>>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceAdmin");
+            .RequireAuthorization(WorkspaceRoles.Admin);
     }
 
     // ── GET /api/v1/automations/{automationId}/logs ──
@@ -37,7 +37,7 @@ public static class AutomationLogEndpoints
         if (!ruleExists)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Automation rule with id '{automationId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -48,7 +48,7 @@ public static class AutomationLogEndpoints
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<AutomationLogStatus>(status, true, out var logStatus))
             query = query.Where(l => l.Status == logStatus);
 
-        var effectivePageSize = Math.Min(pageSize, 100);
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
         var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
 
         var logs = await query

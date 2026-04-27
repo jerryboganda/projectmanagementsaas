@@ -17,6 +17,9 @@ public sealed class TaskChecklistItemConfiguration : IEntityTypeConfiguration<Ta
         builder.HasIndex(ci => new { ci.TaskId, ci.SortOrder })
             .HasDatabaseName("ix_task_checklist_items_task_id_sort_order");
 
+        builder.HasIndex(ci => new { ci.TaskId, ci.IsCompleted })
+            .HasDatabaseName("ix_task_checklist_items_task_id_is_completed");
+
         builder.HasIndex(ci => ci.WorkspaceId)
             .HasDatabaseName("ix_task_checklist_items_workspace_id");
 

@@ -16,12 +16,12 @@ public static class GoalEndpoints
             .WithTags("Goals")
             .RequireAuthorization();
 
-        group.MapGet("/", ListGoals).WithName("ListGoals").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/", CreateGoal).WithName("CreateGoal").RequireAuthorization("WorkspaceMember");
-        group.MapGet("/{id:guid}", GetGoal).WithName("GetGoal").RequireAuthorization("WorkspaceGuest");
-        group.MapPut("/{id:guid}", UpdateGoal).WithName("UpdateGoal").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{id:guid}", DeleteGoal).WithName("DeleteGoal").RequireAuthorization("WorkspaceAdmin");
-        group.MapPost("/{id:guid}/projects", LinkProject).WithName("LinkGoalProject").RequireAuthorization("WorkspaceMember");
+        group.MapGet("/", ListGoals).WithName("ListGoals").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/", CreateGoal).WithName("CreateGoal").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapGet("/{id:guid}", GetGoal).WithName("GetGoal").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapPut("/{id:guid}", UpdateGoal).WithName("UpdateGoal").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{id:guid}", DeleteGoal).WithName("DeleteGoal").RequireAuthorization(WorkspaceRoles.Admin);
+        group.MapPost("/{id:guid}/projects", LinkProject).WithName("LinkGoalProject").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── GET /api/v1/goals ──
@@ -33,9 +33,12 @@ public static class GoalEndpoints
         string? type = null,
         Guid? ownerId = null,
         int pageSize = 25,
+        int page = 1,
         string sortBy = "createdAt",
         string sortOrder = "desc")
     {
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
+        var offset = (int)Math.Min((long)(Math.Max(page, 1) - 1) * effectivePageSize, int.MaxValue);
         var query = db.Goals.AsNoTracking().Where(g => !g.IsDeleted);
 
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<GoalStatus>(status, true, out var gs))
@@ -52,7 +55,7 @@ public static class GoalEndpoints
             _ => sortOrder == "asc" ? query.OrderBy(g => g.CreatedAt) : query.OrderByDescending(g => g.CreatedAt)
         };
 
-        var goals = await query.Take(Math.Min(pageSize, 100))
+        var goals = await query.Skip(offset).Take(effectivePageSize)
             .Select(g => new GoalResponse(
                 g.Id,
                 g.WorkspaceId,
@@ -193,7 +196,7 @@ public static class GoalEndpoints
         if (goal is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Goal with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -221,7 +224,7 @@ public static class GoalEndpoints
         if (goal is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Goal with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -253,7 +256,7 @@ public static class GoalEndpoints
         if (goal is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Goal with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -282,7 +285,7 @@ public static class GoalEndpoints
         if (!await db.Goals.AnyAsync(g => g.Id == id && !g.IsDeleted, ct))
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Goal with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -290,7 +293,7 @@ public static class GoalEndpoints
         if (!await db.Projects.AnyAsync(p => p.Id == request.ProjectId && !p.IsDeleted, ct))
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Project with id '{request.ProjectId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -298,7 +301,7 @@ public static class GoalEndpoints
         if (await db.GoalProjectLinks.AnyAsync(l => l.GoalId == id && l.ProjectId == request.ProjectId, ct))
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: "This project is already linked to the goal.",
                 statusCode: StatusCodes.Status409Conflict);
         }

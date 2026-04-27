@@ -10,17 +10,19 @@ namespace LinearPrecision.Api.Modules.Calendar.Endpoints;
 
 public static class CalendarEndpoints
 {
+    private const int MaxCalendarRangeDays = 366;
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/calendar")
             .WithTags("Calendar")
             .RequireAuthorization();
 
-        group.MapGet("/", ListCalendarItems).WithName("ListCalendarItems").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/", CreateCalendarItem).WithName("CreateCalendarItem").RequireAuthorization("WorkspaceMember");
-        group.MapGet("/{id:guid}", GetCalendarItem).WithName("GetCalendarItem").RequireAuthorization("WorkspaceGuest");
-        group.MapPut("/{id:guid}", UpdateCalendarItem).WithName("UpdateCalendarItem").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{id:guid}", DeleteCalendarItem).WithName("DeleteCalendarItem").RequireAuthorization("WorkspaceMember");
+        group.MapGet("/", ListCalendarItems).WithName("ListCalendarItems").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/", CreateCalendarItem).WithName("CreateCalendarItem").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapGet("/{id:guid}", GetCalendarItem).WithName("GetCalendarItem").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapPut("/{id:guid}", UpdateCalendarItem).WithName("UpdateCalendarItem").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{id:guid}", DeleteCalendarItem).WithName("DeleteCalendarItem").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── GET /api/v1/calendar ──
@@ -34,8 +36,24 @@ public static class CalendarEndpoints
         if (!start.HasValue || !end.HasValue)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "Both 'start' and 'end' query parameters are required.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (end.Value < start.Value)
+        {
+            return Results.Problem(
+                title: ProblemTitles.BadRequest,
+                detail: "The 'end' query parameter must be greater than or equal to 'start'.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (end.Value - start.Value > TimeSpan.FromDays(MaxCalendarRangeDays))
+        {
+            return Results.Problem(
+                title: ProblemTitles.BadRequest,
+                detail: $"Calendar range cannot exceed {MaxCalendarRangeDays} days.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
@@ -140,7 +158,7 @@ public static class CalendarEndpoints
         if (item is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Calendar item with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -165,7 +183,7 @@ public static class CalendarEndpoints
         if (item is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Calendar item with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -206,7 +224,7 @@ public static class CalendarEndpoints
         if (item is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Calendar item with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

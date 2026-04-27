@@ -2,12 +2,19 @@
 
 import {
   type AuthSessionResponse,
+  type ConfirmEmailRequest,
   type CreateWorkspaceRequest,
   type ForgotPasswordRequest,
+  isMfaChallenge,
   type LoginRequest,
+  type LoginResult,
+  type MfaChallengeResponse,
   type PersistedAuthSession,
   type RegisterRequest,
+  type RegistrationPendingResponse,
+  type ResendConfirmationRequest,
   type ResetPasswordRequest,
+  type VerifyMfaLoginRequest,
   type WorkspaceResponse,
 } from "@/lib/api/contracts";
 import { createApiClient, type LinearPrecisionApiClient } from "@/lib/api/client";
@@ -27,8 +34,11 @@ interface AuthContextValue {
   session: PersistedAuthSession | null;
   status: AuthStatus;
   isAuthenticated: boolean;
-  login: (input: LoginRequest) => Promise<PersistedAuthSession>;
-  register: (input: RegisterRequest) => Promise<PersistedAuthSession>;
+  login: (input: LoginRequest) => Promise<PersistedAuthSession | MfaChallengeResponse>;
+  verifyMfaLogin: (input: VerifyMfaLoginRequest) => Promise<PersistedAuthSession>;
+  register: (input: RegisterRequest) => Promise<RegistrationPendingResponse>;
+  confirmEmail: (input: ConfirmEmailRequest) => Promise<void>;
+  resendEmailConfirmation: (input: ResendConfirmationRequest) => Promise<void>;
   forgotPassword: (input: ForgotPasswordRequest) => Promise<void>;
   resetPassword: (input: ResetPasswordRequest) => Promise<void>;
   refresh: () => Promise<PersistedAuthSession | null>;
@@ -116,7 +126,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (input: LoginRequest) => {
-      const nextSession = toPersistedSession(await createApiClient().login(input));
+      const result: LoginResult = await createApiClient().login(input);
+      if (isMfaChallenge(result)) {
+        // Caller is responsible for prompting for the TOTP code and calling
+        // verifyMfaLogin. The session has not been established yet.
+        return result;
+      }
+      const nextSession = toPersistedSession(result);
+      return applySession(nextSession)!;
+    },
+    [applySession],
+  );
+
+  const verifyMfaLogin = useCallback(
+    async (input: VerifyMfaLoginRequest) => {
+      const session = await createApiClient().verifyMfaLogin(input);
+      const nextSession = toPersistedSession(session);
       return applySession(nextSession)!;
     },
     [applySession],
@@ -124,11 +149,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = useCallback(
     async (input: RegisterRequest) => {
-      const nextSession = toPersistedSession(await createApiClient().register(input));
-      return applySession(nextSession)!;
+      const pendingRegistration = await createApiClient().register(input);
+      applySession(null);
+      return pendingRegistration;
     },
     [applySession],
   );
+
+  const confirmEmail = useCallback(async (input: ConfirmEmailRequest) => {
+    await createApiClient().confirmEmail(input);
+  }, []);
+
+  const resendEmailConfirmation = useCallback(async (input: ResendConfirmationRequest) => {
+    await createApiClient().resendEmailConfirmation(input);
+  }, []);
 
   const forgotPassword = useCallback(async (input: ForgotPasswordRequest) => {
     await createApiClient().forgotPassword(input);
@@ -174,7 +208,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       status,
       isAuthenticated: status === "authenticated" && !!session,
       login,
+      verifyMfaLogin,
       register,
+      confirmEmail,
+      resendEmailConfirmation,
       forgotPassword,
       resetPassword,
       refresh,
@@ -188,7 +225,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       status,
       login,
+      verifyMfaLogin,
       register,
+      confirmEmail,
+      resendEmailConfirmation,
       forgotPassword,
       resetPassword,
       refresh,

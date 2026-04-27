@@ -139,6 +139,9 @@ function timeTrackingMembersQueryKey(workspaceId: string | null) {
   return ["time-tracking", workspaceId, "members"] as const;
 }
 
+const TIME_TRACKING_TASK_PAGE_SIZE = 100;
+const TIME_TRACKING_TASK_MAX_PAGES = 2;
+
 function toCreateTimeEntryRequest(
   input: TimeEntryCreateInput,
   tasksById: Map<string, TaskResponse>,
@@ -311,12 +314,26 @@ export function useTimeTrackingData(start: Date, end: Date) {
     queryKey: timeTrackingTasksQueryKey(activeWorkspaceId),
     enabled: !!activeWorkspaceId,
     staleTime: 30_000,
-    queryFn: async () =>
-      apiClient.listTasks({
-        pageSize: 200,
-        sortBy: "createdAt",
-        sortOrder: "desc",
-      }),
+    queryFn: async () => {
+      const taskPages: TaskResponse[][] = [];
+
+      for (let page = 1; page <= TIME_TRACKING_TASK_MAX_PAGES; page += 1) {
+        const pageTasks = await apiClient.listTasks({
+          page,
+          pageSize: TIME_TRACKING_TASK_PAGE_SIZE,
+          sortBy: "createdAt",
+          sortOrder: "desc",
+        });
+
+        taskPages.push(pageTasks);
+
+        if (pageTasks.length < TIME_TRACKING_TASK_PAGE_SIZE) {
+          break;
+        }
+      }
+
+      return taskPages.flat();
+    },
   });
 
   const projectsQuery = useQuery<ProjectResponse[]>({

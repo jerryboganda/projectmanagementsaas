@@ -1,5 +1,7 @@
 namespace LinearPrecision.Shared.Extensions;
 
+using System.Globalization;
+
 public static class DateTimeExtensions
 {
     /// <summary>
@@ -22,7 +24,8 @@ public static class DateTimeExtensions
 
     /// <summary>
     /// Returns the period string for monthly aggregation (e.g., "2025-01").
+    /// Uses invariant culture so the format is stable across locales.
     /// </summary>
     public static string ToPeriodString(this DateTime dt)
-        => dt.ToString("yyyy-MM");
+        => dt.ToString("yyyy-MM", CultureInfo.InvariantCulture);
 }

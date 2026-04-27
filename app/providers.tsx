@@ -10,6 +10,7 @@ import { AppShellGuard } from "@/components/auth/app-shell-guard";
 import { CommandPaletteProvider } from "@/components/command-palette-provider";
 import { AnnouncerProvider } from '@/components/ui/announcer';
 import { ToastProvider } from "@/components/ui/toast";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { KeyboardShortcutsDialog } from "@/components/ui/keyboard-shortcuts-dialog";
 import { GlobalShortcuts } from "@/components/global-shortcuts";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
@@ -55,16 +56,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 <RealtimeProvider>
                   <InboxProvider>
                     <ToastProvider>
-                      <AnnouncerProvider>
-                        <AiCopilotProvider>
-                          <CommandPaletteProvider>
-                            <GlobalShortcuts />
-                            <KeyboardShortcutsDialog />
-                            <OnboardingWizard />
-                            {children}
-                          </CommandPaletteProvider>
-                        </AiCopilotProvider>
-                      </AnnouncerProvider>
+                      <ConfirmProvider>
+                        <AnnouncerProvider>
+                          <AiCopilotProvider>
+                            <CommandPaletteProvider>
+                              <GlobalShortcuts />
+                              <KeyboardShortcutsDialog />
+                              <OnboardingWizard />
+                              {children}
+                            </CommandPaletteProvider>
+                          </AiCopilotProvider>
+                        </AnnouncerProvider>
+                      </ConfirmProvider>
                     </ToastProvider>
                   </InboxProvider>
                 </RealtimeProvider>

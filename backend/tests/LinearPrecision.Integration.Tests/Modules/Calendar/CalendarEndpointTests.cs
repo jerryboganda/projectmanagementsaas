@@ -18,11 +18,12 @@ public class CalendarEndpointTests
         _fixture = fixture;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task List_calendar_items_should_require_start_and_end_query_parameters()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"calendar-range-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(authedClient, session.ActiveWorkspaceId!.Value);
@@ -37,11 +38,12 @@ public class CalendarEndpointTests
         missingEndResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task List_calendar_items_should_return_calendar_items_with_creator_metadata()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"calendar-list-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(authedClient, session.ActiveWorkspaceId!.Value);
@@ -73,11 +75,12 @@ public class CalendarEndpointTests
         item.Creator.AvatarUrl.Should().BeNull();
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Create_calendar_item_should_return_the_created_item_and_location_header()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"calendar-create-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(authedClient, session.ActiveWorkspaceId!.Value);
@@ -99,11 +102,12 @@ public class CalendarEndpointTests
         payload.UpdatedAt.Should().NotBe(default);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Get_calendar_item_should_return_the_created_item()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"calendar-get-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(authedClient, session.ActiveWorkspaceId!.Value);
@@ -127,11 +131,12 @@ public class CalendarEndpointTests
         payload!.Id.Should().Be(created.Id);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Update_calendar_item_should_persist_changes()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"calendar-update-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(authedClient, session.ActiveWorkspaceId!.Value);
@@ -166,11 +171,12 @@ public class CalendarEndpointTests
         payload.UpdatedAt.Should().NotBe(default(DateTime));
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Delete_calendar_item_should_remove_the_item()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"calendar-delete-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(authedClient, session.ActiveWorkspaceId!.Value);

@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using FluentAssertions;
 using LinearPrecision.Api.Infrastructure.Auth;
 using LinearPrecision.Shared.Domain.Enums;
@@ -41,6 +42,34 @@ public class JwtTokenGeneratorTests
 
         token.Should().NotBeNullOrWhiteSpace();
         token.Split('.').Should().HaveCount(3, "JWT should have 3 parts: header.payload.signature");
+    }
+
+    [Fact]
+    public void GenerateHubAccessToken_should_scope_token_to_hub_path()
+    {
+        var config = CreateConfiguration();
+        var generator = new JwtTokenGenerator(config);
+        var user = new Api.Entities.User
+        {
+            Id = Guid.NewGuid(),
+            Email = "test@example.com",
+            FullName = "Test User",
+            UserName = "test@example.com",
+        };
+        var workspaceId = Guid.NewGuid();
+
+        var token = generator.GenerateHubAccessToken(
+            user,
+            MembershipRole.Member,
+            workspaceId,
+            "/hubs/board");
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+
+        jwt.Claims.Should().Contain(claim => claim.Type == "token_use" && claim.Value == "hub");
+        jwt.Claims.Should().Contain(claim => claim.Type == "hub_path" && claim.Value == "/hubs/board");
+        jwt.Claims.Should().Contain(claim => claim.Type == "workspace_id" && claim.Value == workspaceId.ToString());
+        jwt.ValidTo.Should().BeCloseTo(DateTime.UtcNow.AddSeconds(60), TimeSpan.FromSeconds(10));
     }
 
     [Fact]

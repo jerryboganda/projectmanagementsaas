@@ -16,20 +16,27 @@ public static class TaskAttachmentEndpoints
         var group = app.MapGroup("/api/v1/tasks/{taskId:guid}/attachments")
             .WithTags("Tasks");
 
-        group.MapGet("/", ListAttachments).WithName("ListTaskAttachments").RequireAuthorization("WorkspaceGuest");
-        group.MapPost("/upload", CreateAttachmentUpload).WithName("CreateTaskAttachmentUpload").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{attachmentId:guid}", DeleteAttachment).WithName("DeleteTaskAttachment").RequireAuthorization("WorkspaceMember");
+        group.MapGet("/", ListAttachments).WithName("ListTaskAttachments").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapPost("/upload", CreateAttachmentUpload).WithName("CreateTaskAttachmentUpload").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{attachmentId:guid}", DeleteAttachment).WithName("DeleteTaskAttachment").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     private static async Task<IResult> ListAttachments(
         Guid taskId,
         AppDbContext db,
         IStorageService storage,
-        CancellationToken ct)
+        CancellationToken ct,
+        int page = 1,
+        int pageSize = 25)
     {
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var attachments = await db.TaskAttachments.AsNoTracking()
             .Where(attachment => attachment.TaskId == taskId)
             .OrderByDescending(attachment => attachment.CreatedAt)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(attachment => new
             {
                 AttachmentId = attachment.Id,
@@ -94,7 +101,7 @@ public static class TaskAttachmentEndpoints
         if (task is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Task with id '{taskId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -146,7 +153,7 @@ public static class TaskAttachmentEndpoints
         if (attachment is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Attachment was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

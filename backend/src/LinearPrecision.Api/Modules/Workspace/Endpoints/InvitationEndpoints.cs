@@ -1,4 +1,5 @@
 using LinearPrecision.Api.Entities;
+using LinearPrecision.Api.Infrastructure.Auth;
 using LinearPrecision.Api.Infrastructure.Persistence;
 using LinearPrecision.Api.Modules.Identity.Endpoints;
 using LinearPrecision.Api.Modules.Identity.Models;
@@ -8,6 +9,7 @@ using LinearPrecision.Shared.Contracts;
 using LinearPrecision.Shared.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace LinearPrecision.Api.Modules.Workspace.Endpoints;
 
@@ -26,7 +28,7 @@ public static class InvitationEndpoints
 
         group.MapPost("/{token}/accept", AcceptInvitationAsync)
             .WithName("AcceptInvitation")
-            .Produces<AuthSessionResponse>(200)
+            .Produces<AuthSessionBodyResponse>(200)
             .ProducesProblem(401)
             .ProducesProblem(403)
             .ProducesProblem(404)
@@ -38,10 +40,14 @@ public static class InvitationEndpoints
         AppDbContext db,
         CancellationToken ct)
     {
+        // F-04: hash the inbound plaintext token before lookup so the DB only ever
+        // sees the hashed form. Avoid exposing inviter / project / member counts —
+        // we return the minimum the accept screen needs.
+        var tokenHash = InvitationTokenHasher.Hash(token);
         var invitation = await db.Invitations
             .AsNoTracking()
             .IgnoreQueryFilters()
-            .Where(item => item.Token == token)
+            .Where(item => item.Token == tokenHash)
             .Join(
                 db.Workspaces.AsNoTracking().IgnoreQueryFilters().Where(workspace => !workspace.IsDeleted),
                 item => item.WorkspaceId,
@@ -64,23 +70,33 @@ public static class InvitationEndpoints
         ICurrentUser currentUser,
         UserManager<User> userManager,
         ITokenService tokenService,
+        IDistributedCache cache,
         HttpContext httpContext,
         CancellationToken ct)
     {
         if (currentUser.UserId is null)
         {
-            return Results.Problem(title: "Unauthorized", statusCode: 401);
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
         }
 
         var user = await userManager.FindByIdAsync(currentUser.UserId.Value.ToString());
         if (user is null || string.IsNullOrWhiteSpace(user.Email))
         {
-            return Results.Problem(title: "Unauthorized", statusCode: 401);
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
         }
 
+        if (!await userManager.IsEmailConfirmedAsync(user))
+        {
+            return Results.Problem(
+                title: "Email confirmation required",
+                detail: "Confirm your email address before accepting invitations.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var tokenHash = InvitationTokenHasher.Hash(token);
         var invitation = await db.Invitations
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(item => item.Token == token, ct);
+            .FirstOrDefaultAsync(item => item.Token == tokenHash, ct);
 
         if (invitation is null)
         {
@@ -109,7 +125,7 @@ public static class InvitationEndpoints
         if (!string.Equals(invitation.Email, user.Email, StringComparison.OrdinalIgnoreCase))
         {
             return Results.Problem(
-                title: "Forbidden",
+                title: ProblemTitles.Forbidden,
                 detail: "This invitation belongs to a different email address.",
                 statusCode: StatusCodes.Status403Forbidden);
         }
@@ -144,9 +160,10 @@ public static class InvitationEndpoints
         user.LastActiveWorkspaceId = invitation.WorkspaceId;
         await userManager.UpdateAsync(user);
         await db.SaveChangesAsync(ct);
+        await cache.RemoveAsync(WorkspaceRoleAuthorizationHandler.RoleCacheKey(invitation.WorkspaceId, user.Id), ct);
 
         var session = await tokenService.GenerateTokenPairAsync(user, invitation.WorkspaceId);
         AuthCookieHelper.SetRefreshTokenCookie(httpContext, session.RefreshToken);
-        return Results.Ok(session);
+        return Results.Ok(AuthCookieHelper.SessionResponseBody(httpContext, session));
     }
 }

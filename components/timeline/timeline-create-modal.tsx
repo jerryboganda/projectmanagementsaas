@@ -59,33 +59,32 @@ export function TimelineCreateModal({
   const [endDate, setEndDate] = useState(addDays(defaultStartDate ?? today, 3));
   const [error, setError] = useState<string | null>(null);
 
-  // Set first project as default once projects load
-  useEffect(() => {
-    if (projects.length > 0 && !projectId) {
-      setProjectId(projects[0].id);
-    }
-  }, [projects, projectId]);
+  // Set first project as default once projects load. Compare during render so
+  // it lands before the first paint that would show an empty selector.
+  if (projects.length > 0 && !projectId) {
+    setProjectId(projects[0].id);
+  }
 
-  // Sync end date when start date changes
-  useEffect(() => {
-    if (endDate < startDate) {
-      setEndDate(addDays(startDate, 3));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate]);
+  // Sync end date when start date changes (compare during render).
+  if (endDate < startDate) {
+    setEndDate(addDays(startDate, 3));
+  }
 
-  // Reset form when modal opens
-  useEffect(() => {
+  // Reset form when modal opens — compare during render against the previous
+  // open state so the reset lands before the first commit.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (prevIsOpen !== isOpen) {
+    setPrevIsOpen(isOpen);
     if (isOpen) {
+      const baseDate = defaultStartDate ?? todayKey();
       setTitle("");
       setDescription("");
       setPriority("Medium");
-      setStartDate(defaultStartDate ?? today);
-      setEndDate(addDays(defaultStartDate ?? today, 3));
+      setStartDate(baseDate);
+      setEndDate(addDays(baseDate, 3));
       setError(null);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

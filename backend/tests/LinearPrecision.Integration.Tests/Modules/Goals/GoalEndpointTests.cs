@@ -19,11 +19,12 @@ public class GoalEndpointTests
         _fixture = fixture;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Goal_detail_should_include_subgoals_project_links_and_initiatives()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"goal-contract-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(authedClient, session.ActiveWorkspaceId!.Value);

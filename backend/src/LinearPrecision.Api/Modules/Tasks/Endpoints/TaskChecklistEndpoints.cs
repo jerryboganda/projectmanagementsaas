@@ -17,21 +17,29 @@ public static class TaskChecklistEndpoints
             .WithTags("Tasks")
             .RequireAuthorization();
 
-        group.MapGet("/", ListChecklistItems).WithName("ListChecklistItems").RequireAuthorization("WorkspaceGuest");
-        group.MapPost("/", AddChecklistItem).WithName("AddChecklistItem").RequireAuthorization("WorkspaceMember");
-        group.MapPut("/{itemId:guid}", UpdateChecklistItem).WithName("UpdateChecklistItem").RequireAuthorization("WorkspaceMember");
-        group.MapPatch("/{itemId:guid}", UpdateChecklistItem).WithName("PatchChecklistItem").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{itemId:guid}", RemoveChecklistItem).WithName("RemoveChecklistItem").RequireAuthorization("WorkspaceMember");
+        group.MapGet("/", ListChecklistItems).WithName("ListChecklistItems").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapPost("/", AddChecklistItem).WithName("AddChecklistItem").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPut("/{itemId:guid}", UpdateChecklistItem).WithName("UpdateChecklistItem").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPatch("/{itemId:guid}", UpdateChecklistItem).WithName("PatchChecklistItem").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{itemId:guid}", RemoveChecklistItem).WithName("RemoveChecklistItem").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     private static async Task<IResult> ListChecklistItems(
         Guid taskId,
         AppDbContext db,
-        CancellationToken ct)
+        CancellationToken ct,
+        int page = 1,
+        int pageSize = 25)
     {
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var items = await db.TaskChecklistItems.AsNoTracking()
             .Where(item => item.TaskId == taskId)
             .OrderBy(item => item.SortOrder)
+            .ThenBy(item => item.CreatedAt)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(item => new TaskChecklistListItemResponse(
                 item.Id,
                 item.Title,
@@ -61,7 +69,7 @@ public static class TaskChecklistEndpoints
         if (projectId is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Task with id '{taskId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -110,7 +118,7 @@ public static class TaskChecklistEndpoints
         if (item is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Checklist item was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -145,7 +153,7 @@ public static class TaskChecklistEndpoints
         if (item is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Checklist item was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

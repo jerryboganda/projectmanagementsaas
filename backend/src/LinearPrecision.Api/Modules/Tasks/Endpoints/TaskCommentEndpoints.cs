@@ -17,20 +17,29 @@ public static class TaskCommentEndpoints
             .WithTags("Tasks")
             .RequireAuthorization();
 
-        group.MapGet("/", ListComments).WithName("ListTaskComments").RequireAuthorization("WorkspaceGuest");
-        group.MapPost("/", AddComment).WithName("AddTaskComment").RequireAuthorization("WorkspaceGuest");
-        group.MapPut("/{commentId:guid}", EditComment).WithName("EditTaskComment").RequireAuthorization();
-        group.MapDelete("/{commentId:guid}", DeleteComment).WithName("DeleteTaskComment").RequireAuthorization();
+        group.MapGet("/", ListComments).WithName("ListTaskComments").RequireAuthorization(WorkspaceRoles.Guest);
+        // F-06: comment writes require WorkspaceMember (Guests are read-only). Edit/delete
+        // also require WorkspaceMember; the existing handler-level owner check still applies.
+        group.MapPost("/", AddComment).WithName("AddTaskComment").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPut("/{commentId:guid}", EditComment).WithName("EditTaskComment").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{commentId:guid}", DeleteComment).WithName("DeleteTaskComment").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     private static async Task<IResult> ListComments(
         Guid taskId,
         AppDbContext db,
-        CancellationToken ct)
+        CancellationToken ct,
+        int page = 1,
+        int pageSize = 25)
     {
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var comments = await db.TaskComments.AsNoTracking()
             .Where(comment => comment.TaskId == taskId)
             .OrderBy(comment => comment.CreatedAt)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(comment => new TaskCommentListItemResponse(
                 comment.Id,
                 comment.Body,
@@ -66,7 +75,7 @@ public static class TaskCommentEndpoints
         if (projectId is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Task with id '{taskId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -109,7 +118,7 @@ public static class TaskCommentEndpoints
         if (comment is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Comment was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -117,7 +126,7 @@ public static class TaskCommentEndpoints
         if (comment.AuthorId != currentUser.UserId)
         {
             return Results.Problem(
-                title: "Forbidden",
+                title: ProblemTitles.Forbidden,
                 detail: "You can only edit your own comments.",
                 statusCode: StatusCodes.Status403Forbidden);
         }
@@ -145,7 +154,7 @@ public static class TaskCommentEndpoints
         if (comment is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Comment was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -154,7 +163,7 @@ public static class TaskCommentEndpoints
         if (comment.AuthorId != currentUser.UserId && !currentUser.Roles.Contains("Admin"))
         {
             return Results.Problem(
-                title: "Forbidden",
+                title: ProblemTitles.Forbidden,
                 detail: "You can only delete your own comments.",
                 statusCode: StatusCodes.Status403Forbidden);
         }

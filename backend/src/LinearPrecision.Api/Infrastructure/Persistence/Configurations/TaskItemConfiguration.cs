@@ -53,6 +53,19 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.HasIndex(t => new { t.WorkspaceId, t.ProjectId, t.SortOrder })
             .HasDatabaseName("ix_task_items_workspace_id_project_id_sort_order");
 
+        builder.HasIndex(t => t.DeletedAt)
+            .HasDatabaseName("ix_task_items_deleted_at")
+            .HasFilter("is_deleted = true");
+
+        // Hot-order indexes for task listings and feeds
+        builder.HasIndex(t => new { t.WorkspaceId, t.ProjectId, t.CreatedAt })
+            .IsDescending(false, false, true)
+            .HasDatabaseName("ix_task_items_workspace_id_project_id_created_at");
+
+        builder.HasIndex(t => new { t.WorkspaceId, t.AssigneeId, t.CreatedAt })
+            .IsDescending(false, false, true)
+            .HasDatabaseName("ix_task_items_workspace_id_assignee_id_created_at");
+
         // ── FK: WorkspaceId -> Workspaces CASCADE (configured from Workspace side) ──
 
         // ── FK: ProjectId -> Projects CASCADE ──

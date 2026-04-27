@@ -10,21 +10,25 @@ namespace LinearPrecision.Api.Modules.Intake.Endpoints;
 
 public static class SubmissionEndpoints
 {
+    private const int DefaultPageSize = 100;
+    private const int MaxPageSize = 250;
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
-        // Public submission endpoint (no auth)
+        // Public submission endpoint (no auth) — F-09: per-IP rate limit "intake".
         app.MapPost("/api/v1/intake/{formSlug}/submit", SubmitRequest)
             .WithTags("Intake")
             .WithName("SubmitIntakeRequest")
+            .RequireRateLimiting("intake")
             .AllowAnonymous();
 
         var group = app.MapGroup("/api/v1/intake")
             .WithTags("Intake")
             .RequireAuthorization();
 
-        group.MapGet("/submissions", ListSubmissions).WithName("ListSubmissions").RequireAuthorization("WorkspaceMember");
-        group.MapPut("/submissions/{id:guid}/review", ReviewSubmission).WithName("ReviewSubmission").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/submissions/{id:guid}/convert-to-task", ConvertToTask).WithName("ConvertSubmissionToTask").RequireAuthorization("WorkspaceMember");
+        group.MapGet("/submissions", ListSubmissions).WithName("ListSubmissions").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPut("/submissions/{id:guid}/review", ReviewSubmission).WithName("ReviewSubmission").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/submissions/{id:guid}/convert-to-task", ConvertToTask).WithName("ConvertSubmissionToTask").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── POST /api/v1/intake/{formSlug}/submit (PUBLIC) ──
@@ -46,7 +50,7 @@ public static class SubmissionEndpoints
         if (form is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Request form with slug '{formSlug}' was not found or is not active.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -82,7 +86,9 @@ public static class SubmissionEndpoints
         AppDbContext db,
         CancellationToken ct,
         Guid? requestFormId = null,
-        string? status = null)
+        string? status = null,
+        int page = 1,
+        int pageSize = DefaultPageSize)
     {
         var query = db.RequestSubmissions.AsNoTracking().AsQueryable();
 
@@ -92,8 +98,14 @@ public static class SubmissionEndpoints
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<SubmissionStatus>(status, true, out var parsedStatus))
             query = query.Where(s => s.Status == parsedStatus);
 
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var submissions = await query
             .OrderByDescending(s => s.CreatedAt)
+            .ThenByDescending(s => s.Id)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(s => new SubmissionResponse(
                 s.Id,
                 s.RequestFormId,
@@ -132,7 +144,7 @@ public static class SubmissionEndpoints
         if (submission is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Submission with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -140,7 +152,7 @@ public static class SubmissionEndpoints
         if (submission.Status == SubmissionStatus.ConvertedToTask)
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: "Converted submissions cannot be reviewed again.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -172,7 +184,7 @@ public static class SubmissionEndpoints
         if (submission is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Submission with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -180,7 +192,7 @@ public static class SubmissionEndpoints
         if (submission.Status == SubmissionStatus.ConvertedToTask)
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: "This submission has already been converted to a task.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -194,7 +206,7 @@ public static class SubmissionEndpoints
         if (project is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Target project was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

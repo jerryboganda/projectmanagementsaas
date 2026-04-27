@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/contexts/auth-context";
 import { useWorkspace } from "@/contexts/workspace-context";
+import { createApiClient } from "@/lib/api/client";
 import { getRuntimeConfig } from "@/lib/runtime/runtime-config";
 import {
   HubConnection,
@@ -21,6 +22,7 @@ const RealtimeContext = createContext<RealtimeContextValue | undefined>(undefine
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const connectionsRef = useRef(new Map<string, HubConnection>());
   const { session } = useAuth();
+  const accessToken = session?.accessToken ?? null;
   const { activeWorkspaceId } = useWorkspace();
   const previousWorkspaceIdRef = useRef<string | null | undefined>(activeWorkspaceId);
 
@@ -31,10 +33,14 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!session?.accessToken) {
+    if (!accessToken) {
       void disconnectAll();
     }
-  }, [disconnectAll, session?.accessToken]);
+  }, [accessToken, disconnectAll]);
+
+  useEffect(() => {
+    void disconnectAll();
+  }, [accessToken, activeWorkspaceId, disconnectAll]);
 
   useEffect(() => {
     if (previousWorkspaceIdRef.current === activeWorkspaceId) {
@@ -47,6 +53,10 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
   const connect = useCallback(
     async (hubPath: string) => {
+      if (!accessToken || !activeWorkspaceId) {
+        throw new Error("Realtime connection requires an authenticated workspace session.");
+      }
+
       const existingConnection = connectionsRef.current.get(hubPath);
       if (existingConnection) {
         if (existingConnection.state === HubConnectionState.Disconnected) {
@@ -68,7 +78,17 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
       const connection = new HubConnectionBuilder()
         .withUrl(hubUrl.toString(), {
-          accessTokenFactory: () => session?.accessToken ?? "",
+          accessTokenFactory: async () => {
+            const tokenClient = createApiClient({
+              accessToken,
+              workspaceId: activeWorkspaceId,
+            });
+            const hubToken = await tokenClient.createHubToken({
+              hubPath,
+              workspaceId: activeWorkspaceId,
+            });
+            return hubToken.accessToken;
+          },
           // Only use LongPolling as final fallback so WebSocket errors are suppressed
           transport: undefined,
         })
@@ -87,7 +107,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
       return connection;
     },
-    [activeWorkspaceId, session?.accessToken],
+    [accessToken, activeWorkspaceId],
   );
 
   return (

@@ -14,6 +14,7 @@ public sealed class UsageRecordConfiguration : IEntityTypeConfiguration<UsageRec
 
         // ── Indexes ──
         builder.HasIndex(ur => new { ur.WorkspaceId, ur.MetricName, ur.Period })
+            .IsUnique()
             .HasDatabaseName("ix_usage_records_workspace_id_metric_name_period");
 
         // ── FK: WorkspaceId -> Workspaces CASCADE ──

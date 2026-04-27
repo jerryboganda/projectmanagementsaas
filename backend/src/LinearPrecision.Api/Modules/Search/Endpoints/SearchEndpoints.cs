@@ -12,7 +12,7 @@ public static class SearchEndpoints
             .WithTags("Search")
             .RequireAuthorization();
 
-        group.MapGet("/", Search).WithName("Search").RequireAuthorization("WorkspaceGuest");
+        group.MapGet("/", Search).WithName("Search").RequireAuthorization(WorkspaceRoles.Guest);
     }
 
     // ── GET /api/v1/search ──
@@ -33,7 +33,8 @@ public static class SearchEndpoints
         }
 
         var searchTerm = q.Trim();
-        var effectivePageSize = Math.Min(pageSize, 100);
+        var likePattern = BuildContainsLikePattern(searchTerm);
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
         var results = new List<SearchResultItem>();
 
         // Parse requested entity types (csv: task,project,document,goal)
@@ -50,7 +51,7 @@ public static class SearchEndpoints
         if (searchAll || requestedTypes.Contains("task"))
         {
             var taskQuery = db.TaskItems.AsNoTracking()
-                .Where(t => t.Title.ToLower().Contains(searchTerm.ToLower()));
+                .Where(t => EF.Functions.ILike(t.Title, likePattern, "\\"));
 
             if (projectId.HasValue)
                 taskQuery = taskQuery.Where(t => t.ProjectId == projectId.Value);
@@ -76,7 +77,7 @@ public static class SearchEndpoints
         if (searchAll || requestedTypes.Contains("project"))
         {
             var raw = await db.Projects.AsNoTracking()
-                .Where(p => p.Name.ToLower().Contains(searchTerm.ToLower()))
+                .Where(p => EF.Functions.ILike(p.Name, likePattern, "\\"))
                 .OrderByDescending(p => p.UpdatedAt)
                 .Take(effectivePageSize)
                 .Select(p => new
@@ -97,7 +98,7 @@ public static class SearchEndpoints
         if (searchAll || requestedTypes.Contains("document"))
         {
             var docQuery = db.Documents.AsNoTracking()
-                .Where(d => d.Title.ToLower().Contains(searchTerm.ToLower()));
+                .Where(d => EF.Functions.ILike(d.Title, likePattern, "\\"));
 
             if (projectId.HasValue)
                 docQuery = docQuery.Where(d => d.ProjectId == projectId.Value);
@@ -116,7 +117,7 @@ public static class SearchEndpoints
         if (searchAll || requestedTypes.Contains("goal"))
         {
             var raw = await db.Goals.AsNoTracking()
-                .Where(g => g.Title.ToLower().Contains(searchTerm.ToLower()))
+                .Where(g => EF.Functions.ILike(g.Title, likePattern, "\\"))
                 .OrderByDescending(g => g.UpdatedAt)
                 .Take(effectivePageSize)
                 .Select(g => new
@@ -141,6 +142,16 @@ public static class SearchEndpoints
 
         var response = new SearchResponse(trimmedResults, trimmedResults.Count);
         return Results.Ok(response);
+    }
+
+    private static string BuildContainsLikePattern(string searchTerm)
+    {
+        var escaped = searchTerm
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
+
+        return $"%{escaped}%";
     }
 
     /// <summary>

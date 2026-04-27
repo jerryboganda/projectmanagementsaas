@@ -97,3 +97,58 @@ dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 
 dotnet_naming_style.underscore_camel_case.required_prefix = _
 dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+
+# -----------------------------------------------------------------------------
+# Code Analysis (CA) rule triage
+# -----------------------------------------------------------------------------
+# Tracked in docs/technical-debt-cleanup-plan.md (P2.4). The plan calls for
+# fixing one rule at a time and then flipping it to error. This block records
+# our current decisions:
+#
+#   * Suppressed (style/convention mismatch with our codebase patterns)
+#   * Suggestion / Hint  (informational; surface in IDE, don't break builds)
+#   * Warning            (default; planned to fix and promote to error)
+#
+# Promote a rule to "error" only after every active site has been fixed.
+
+# CA1848 / CA1873: LoggerMessage source generators / disabled-level guards.
+# We use Serilog with structured templates throughout, which addresses the
+# underlying perf concern. Demote to suggestion until we adopt
+# Microsoft.Extensions.Logging source generators.
+dotnet_diagnostic.CA1848.severity = suggestion
+dotnet_diagnostic.CA1873.severity = suggestion
+
+# CA1727: Use PascalCase for named placeholders in logger templates.
+# We use camelCase placeholders (matches our property names). Demote.
+dotnet_diagnostic.CA1727.severity = suggestion
+
+# CA1716: Identifiers should not match keywords in other languages. Public API
+# names like `Error`/`Module` are intentional and stable; renaming them is a
+# breaking change.
+dotnet_diagnostic.CA1716.severity = suggestion
+
+# CA1861: Constant arrays as arguments. Worth fixing in hot paths but a
+# bulk rewrite is risky without component test coverage. Demote to suggestion
+# and revisit per the plan's W5+ wave.
+dotnet_diagnostic.CA1861.severity = suggestion
+
+# CA1862: Prefer string-comparison method overloads. Cannot be applied inside
+# EF Core query expression trees (they're rewritten as SQL `LIKE` /
+# case-insensitive comparisons via ToLowerInvariant). Demote to suggestion
+# until a dedicated PR introduces an `EF.Functions.ILike` helper with
+# proper LIKE-pattern escaping.
+dotnet_diagnostic.CA1862.severity = suggestion
+
+# Test-project conventions: snake_case test method names (`Should_X_When_Y`)
+# are the standard MSTest pattern and explicitly contradicted by CA1707.
+[tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none
+# Tests instantiate JsonSerializerOptions per-test by design (isolation).
+dotnet_diagnostic.CA1869.severity = none
+# xUnit collection-fixture classes conventionally end in 'Collection' (CA1711).
+dotnet_diagnostic.CA1711.severity = none
+
+# EF Core migrations are auto-generated. Don't gate the build on style nits.
+[**/Migrations/*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none

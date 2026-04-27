@@ -22,6 +22,16 @@ public sealed class NotificationConfiguration : IEntityTypeConfiguration<Notific
             .IsDescending(false, false, true)
             .HasDatabaseName("ix_notifications_recipient_id_is_read_created_at");
 
+        builder.HasIndex(n => new { n.RecipientId, n.IsArchived, n.CreatedAt })
+            .IsDescending(false, false, true)
+            .HasDatabaseName("ix_notifications_recipient_id_is_archived_created_at");
+
+        // Partial index for pending email digests (unread & not email-sent)
+        builder.HasIndex(n => new { n.RecipientId, n.CreatedAt })
+            .IsDescending(false, true)
+            .HasDatabaseName("ix_notifications_recipient_unread_email_unsent_created_at")
+            .HasFilter("is_read = false AND email_sent = false");
+
         builder.HasIndex(n => n.WorkspaceId)
             .HasDatabaseName("ix_notifications_workspace_id");
 

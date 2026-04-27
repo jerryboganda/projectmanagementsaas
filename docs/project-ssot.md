@@ -1,6 +1,6 @@
 # Project SSOT
 
-Last updated: 2026-03-24 (full frontend production-ready completion pass)
+Last updated: 2026-04-27 (validation and status refresh)
 
 ## Purpose
 
@@ -15,32 +15,34 @@ When this document conflicts with code or fresh checks, trust:
 
 ## Current Verdict
 
-The frontend is now **100% feature-complete and production-ready**. Every product surface has been built, every gap closed, and all verification checks pass clean.
+The product shell is substantially implemented, but the repository is **not yet production-complete**. Major route surfaces exist and the validated command suite is clean, while deeper subfeatures, production operations, Docker-backed integration execution, and some backend contracts remain open.
 
 What is true today:
 
-- Frontend build, lint (zero warnings), and typecheck all pass with zero errors.
-- All 27 routes compile and generate successfully.
-- All raw `<img>` elements have been replaced with Next.js `Image` components.
+- Frontend lint, typecheck, Vitest, and production build all pass with zero errors.
+- The Next.js 16 build generates 28 app routes and uses offline-safe system font stacks, so production builds do not depend on fetching Google Fonts.
+- All current app-level raw `<img>` lint blockers have been removed; remaining image usage is through Next.js `Image` where applicable.
 - Legacy dead code (`app-data-context.tsx`) has been removed.
-- Backend API unit tests, worker tests, and integration suite all pass.
-- Browser E2E coverage exists for auth redirect and AI provider flows.
-- Every product feature module is now complete with interactive UI, state management, and API integration.
+- Backend API and worker tests pass; Docker-backed integration tests are discovered and skipped with a clear prerequisite message when Docker is unavailable.
+- Browser E2E coverage exists for selected flows, but full end-to-end coverage is still incomplete.
+- Every major product route has an interactive UI; some deeper subfeatures still use local/simulated behavior or await broader backend contracts.
 
 ## Verified Today
 
-Reviewed on 2026-03-24 after the final frontend completion pass.
+Reviewed on 2026-04-27 after the validation/build remediation pass.
 
 | Check | Result | Notes |
 |---|---|---|
-| `npx tsc --noEmit` | PASS | Zero errors |
-| `npx next lint` | PASS | Zero warnings, zero errors |
-| `npx next build` | PASS | All 27 routes compiled, zero errors |
-| `dotnet test backend/tests/LinearPrecision.Api.Tests` | PASS | 37/37 |
-| `dotnet test backend/tests/LinearPrecision.Worker.Tests` | PASS | 10/10 |
-| `dotnet test backend/tests/LinearPrecision.Integration.Tests` | PASS | 31/31 |
+| `cmd /c npm run lint` | PASS | Zero errors reported |
+| `cmd /c npm run typecheck` | PASS | Zero diagnostics reported |
+| `cmd /c npm test` | PASS | 64/64 Vitest tests |
+| `cmd /c npm run build` | PASS | 28 app routes generated; exit code 0 |
+| `dotnet build backend/LinearPrecision.sln --no-restore` | PASS | 6 projects built |
+| `dotnet test backend/LinearPrecision.sln --no-restore` | PASS | 110 total, 72 passed, 38 Docker-backed integration tests skipped |
 
-## Frontend Feature Matrix -- 100% Complete
+## Frontend Feature Matrix -- Current Surface Status
+
+> Known gap: This matrix records the visible route surfaces. Some entries still include local/simulated subfeatures or disabled affordances where backend contracts, broader realtime coverage, or production integrations are not complete.
 
 ### Dashboard (app/page.tsx)
 - **Status: COMPLETE**
@@ -229,9 +231,8 @@ Reviewed on 2026-03-24 after the final frontend completion pass.
 ### Verified Backend State
 
 - API project compiles successfully.
-- API unit tests pass (37/37).
-- Worker tests pass (10/10).
-- Integration tests pass (31/31).
+- Backend solution builds successfully.
+- Backend tests pass with 110 total, 72 passed, and 38 Docker-backed integration tests skipped when Docker is unavailable on `PATH`.
 - SignalR hubs registered at `/hubs/board`, `/hubs/notifications`, `/hubs/presence`, `/hubs/ai-stream`.
 - Task subresource endpoints (comments, checklist, watchers, attachments) are implemented.
 - AI provider CRUD endpoints with protected API key storage.
@@ -241,9 +242,9 @@ Reviewed on 2026-03-24 after the final frontend completion pass.
 
 - Realtime hub coverage is board-only; other surfaces not yet wired to SignalR.
 - Production operations (secrets management, deploy verification, backups, alerting, runbooks) not proven.
-- Teams backend contract does not exist yet (frontend uses local state).
-- Billing/Stripe integration not implemented (frontend uses simulation).
-- Security endpoints (password change, 2FA, sessions, API keys) not fully implemented.
+- Teams backend contract is still incomplete for the full settings UI.
+- Billing/Stripe UI has simulated affordances and still needs production Stripe configuration/webhook verification.
+- Security settings have MFA support, but session/API-key management and broader account-security operations still need completion.
 
 ## Runtime Anchors
 
@@ -262,20 +263,19 @@ Reviewed on 2026-03-24 after the final frontend completion pass.
 
 ## Bottom Line
 
-The frontend is **100% feature-complete and production-ready**:
+The repository is in a clean, validated development state, but it is **not yet production-complete**:
 
-- All 27 routes build successfully with zero TS errors, zero lint warnings
-- Every product surface has been fully implemented with interactive UI
-- All features have proper loading, error, and empty states
+- All current frontend and backend validation commands pass with zero failures
+- Major product surfaces have interactive UI, loading/error handling, and API integration where contracts exist
 - CRUD operations are wired to backend APIs where contracts exist
 - Features without backend contracts use realistic local state with explicit user-facing notes
-- No legacy debt remains (dead code removed, all `<img>` tags migrated)
 - Error boundaries protect every product surface
 - Global infrastructure (command palette, keyboard shortcuts, onboarding, AI copilot) is fully functional
 
 What would be needed for a full production deployment:
 
 1. Move workspace into a Git repository for CI/CD operations
-2. Complete remaining backend contracts (teams, billing, security, broader realtime)
-3. Expand E2E test coverage across all product surfaces
-4. Production operations hardening (secrets, deploy verification, backups, alerting)
+2. Run Docker-backed integration tests in a Docker-capable environment
+3. Complete remaining backend contracts and production integrations (teams, billing, security sessions/API keys, broader realtime)
+4. Expand E2E test coverage across all product surfaces
+5. Production operations hardening (secrets, deploy verification, backups, alerting)

@@ -23,7 +23,7 @@ public class TenancyContractTests
         _fixture = fixture;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Unauthenticated_tenant_scoped_request_should_return_401()
     {
         var client = _fixture.CreateClient();
@@ -33,11 +33,12 @@ public class TenancyContractTests
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Authenticated_request_without_workspace_header_should_return_400()
     {
         var client = _fixture.CreateClient();
         await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"tenant-header-{Guid.NewGuid():N}@test.com");
 
@@ -46,11 +47,12 @@ public class TenancyContractTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Route_scoped_workspace_invitation_creation_should_succeed_for_owner_without_header()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"workspace-owner-{Guid.NewGuid():N}@test.com");
 
@@ -85,16 +87,18 @@ public class TenancyContractTests
             $"session user {session.User.Id}, session workspace {session.ActiveWorkspaceId}, body {responseBody}");
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Authenticated_non_member_on_route_scoped_workspace_endpoint_should_return_403()
     {
         var ownerClient = _fixture.CreateClient();
         var (_, ownerSession) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             ownerClient,
             email: $"workspace-a-{Guid.NewGuid():N}@test.com");
 
         var outsiderClient = _fixture.CreateClient();
         await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             outsiderClient,
             email: $"workspace-b-{Guid.NewGuid():N}@test.com");
 
@@ -103,11 +107,12 @@ public class TenancyContractTests
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Cross_tenant_project_lookup_should_return_404()
     {
         var ownerClient = _fixture.CreateClient();
         var (ownerAuthedClient, ownerSession) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             ownerClient,
             email: $"project-owner-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(ownerAuthedClient, ownerSession.ActiveWorkspaceId!.Value);
@@ -136,6 +141,7 @@ public class TenancyContractTests
 
         var outsiderClient = _fixture.CreateClient();
         var (outsiderAuthedClient, outsiderSession) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             outsiderClient,
             email: $"project-outsider-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(outsiderAuthedClient, outsiderSession.ActiveWorkspaceId!.Value);
@@ -145,11 +151,12 @@ public class TenancyContractTests
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Project_favorite_toggle_should_be_reflected_in_project_list()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"project-favorite-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(authedClient, session.ActiveWorkspaceId!.Value);
@@ -189,11 +196,12 @@ public class TenancyContractTests
             .ContainSingle(project => project.Id == createdProject.Id && project.IsFavorited);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Route_scoped_workspace_settings_should_return_typed_settings_with_defaults_and_saved_values()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"workspace-settings-{Guid.NewGuid():N}@test.com");
 
@@ -229,11 +237,12 @@ public class TenancyContractTests
         payload.WeekStartsOn.Should().Be("Monday");
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Archived_notification_should_be_hidden_from_default_list_and_visible_in_archived_list()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"notifications-{Guid.NewGuid():N}@test.com");
         SetWorkspaceHeader(authedClient, session.ActiveWorkspaceId!.Value);

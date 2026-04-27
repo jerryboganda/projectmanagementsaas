@@ -23,7 +23,7 @@ public class AuthLifecycleEndpointTests
         _fixture = fixture;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Forgot_password_should_return_accepted_for_existing_user()
     {
         var client = _fixture.CreateClient();
@@ -44,7 +44,7 @@ public class AuthLifecycleEndpointTests
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Reset_password_should_allow_login_with_new_password()
     {
         var client = _fixture.CreateClient();
@@ -56,6 +56,8 @@ public class AuthLifecycleEndpointTests
             "/api/v1/auth/register",
             new RegisterRequest(email, originalPassword, "Reset Password User"));
         registerResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await AuthHelper.ConfirmEmailAsync(_fixture, client, email);
 
         await using var scope = _fixture.Services.CreateAsyncScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
@@ -80,11 +82,12 @@ public class AuthLifecycleEndpointTests
         loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Setting_active_workspace_should_return_updated_session()
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"workspace-switch-{Guid.NewGuid():N}@test.com");
 
@@ -112,11 +115,12 @@ public class AuthLifecycleEndpointTests
         updatedSession.Workspaces.Should().Contain(item => item.WorkspaceId == workspace.Id);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Accepting_invitation_should_add_membership_and_switch_active_workspace()
     {
         var ownerClient = _fixture.CreateClient();
         var (ownerAuthedClient, ownerSession) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             ownerClient,
             email: $"owner-{Guid.NewGuid():N}@test.com");
 
@@ -139,6 +143,7 @@ public class AuthLifecycleEndpointTests
 
         var inviteeClient = _fixture.CreateClient();
         var (inviteeAuthedClient, _) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             inviteeClient,
             email: inviteeEmail);
 

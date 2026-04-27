@@ -39,6 +39,17 @@ public sealed class GoalConfiguration : IEntityTypeConfiguration<Goal>
         builder.HasIndex(g => new { g.WorkspaceId, g.IsDeleted })
             .HasDatabaseName("ix_goals_workspace_id_is_deleted");
 
+        builder.HasIndex(g => new { g.WorkspaceId, g.Title })
+            .HasDatabaseName("ix_goals_workspace_id_title");
+
+        builder.HasIndex(g => new { g.WorkspaceId, g.CreatedAt })
+            .IsDescending(false, true)
+            .HasDatabaseName("ix_goals_workspace_id_created_at");
+
+        builder.HasIndex(g => g.DeletedAt)
+            .HasDatabaseName("ix_goals_deleted_at")
+            .HasFilter("is_deleted = true");
+
         // ── FK: WorkspaceId -> Workspaces CASCADE ──
         // (Configured from Workspace side)
 

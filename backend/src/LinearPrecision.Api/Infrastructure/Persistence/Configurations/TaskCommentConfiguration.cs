@@ -24,6 +24,10 @@ public sealed class TaskCommentConfiguration : IEntityTypeConfiguration<TaskComm
         builder.HasIndex(c => c.WorkspaceId)
             .HasDatabaseName("ix_task_comments_workspace_id");
 
+        builder.HasIndex(c => c.DeletedAt)
+            .HasDatabaseName("ix_task_comments_deleted_at")
+            .HasFilter("is_deleted = true");
+
         // ── FK: WorkspaceId -> Workspaces CASCADE ──
         // (Configured from Workspace side or by convention)
 

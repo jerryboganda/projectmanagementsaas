@@ -20,11 +20,22 @@ public sealed class DocumentConfiguration : IEntityTypeConfiguration<Document>
         builder.HasIndex(d => new { d.WorkspaceId, d.ProjectId })
             .HasDatabaseName("ix_documents_workspace_id_project_id");
 
+        builder.HasIndex(d => new { d.WorkspaceId, d.ProjectId, d.CreatedAt })
+            .IsDescending(false, false, true)
+            .HasDatabaseName("ix_documents_workspace_id_project_id_created_at");
+
         builder.HasIndex(d => d.ParentDocumentId)
             .HasDatabaseName("ix_documents_parent_document_id");
 
+        builder.HasIndex(d => new { d.ParentDocumentId, d.IsDeleted, d.SortOrder })
+            .HasDatabaseName("ix_documents_parent_document_id_is_deleted_sort_order");
+
         builder.HasIndex(d => new { d.WorkspaceId, d.IsDeleted })
             .HasDatabaseName("ix_documents_workspace_id_is_deleted");
+
+        builder.HasIndex(d => d.DeletedAt)
+            .HasDatabaseName("ix_documents_deleted_at")
+            .HasFilter("is_deleted = true");
 
         // ── Foreign keys ──
         builder.HasOne<Workspace>()

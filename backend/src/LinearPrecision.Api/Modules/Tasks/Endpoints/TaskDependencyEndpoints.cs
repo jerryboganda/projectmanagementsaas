@@ -13,7 +13,7 @@ public static class TaskDependencyEndpoints
     {
         var group = app.MapGroup("/api/v1/tasks/{taskId:guid}/dependencies")
             .WithTags("Tasks")
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapPost("/", AddDependency).WithName("AddTaskDependency");
         group.MapDelete("/{depId:guid}", RemoveDependency).WithName("RemoveTaskDependency");
@@ -35,7 +35,7 @@ public static class TaskDependencyEndpoints
         if (taskId == request.DependsOnTaskId)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "A task cannot depend on itself.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
@@ -43,7 +43,7 @@ public static class TaskDependencyEndpoints
         if (!await db.TaskItems.AnyAsync(t => t.Id == taskId, ct))
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Task with id '{taskId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -51,7 +51,7 @@ public static class TaskDependencyEndpoints
         if (!await db.TaskItems.AnyAsync(t => t.Id == request.DependsOnTaskId, ct))
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Dependency task was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -61,7 +61,7 @@ public static class TaskDependencyEndpoints
                 d => d.TaskId == taskId && d.DependsOnTaskId == request.DependsOnTaskId, ct))
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: "This dependency already exists.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -93,7 +93,7 @@ public static class TaskDependencyEndpoints
         if (dep is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Dependency was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

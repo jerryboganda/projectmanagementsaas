@@ -9,6 +9,8 @@ namespace LinearPrecision.Api.Modules.Documents.Endpoints;
 
 public static class DocumentEndpoints
 {
+    private const int MaxPageSize = 100;
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/documents")
@@ -18,27 +20,27 @@ public static class DocumentEndpoints
         group.MapGet("/", ListDocuments)
             .WithName("ListDocuments")
             .Produces<List<DocumentResponse>>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceGuest");
+            .RequireAuthorization(WorkspaceRoles.Guest);
 
         group.MapPost("/", CreateDocument)
             .WithName("CreateDocument")
             .Produces<DocumentResponse>(StatusCodes.Status201Created)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapGet("/{id:guid}", GetDocument)
             .WithName("GetDocument")
             .Produces<DocumentResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceGuest");
+            .RequireAuthorization(WorkspaceRoles.Guest);
 
         group.MapPut("/{id:guid}", UpdateDocument)
             .WithName("UpdateDocument")
             .Produces<DocumentResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapDelete("/{id:guid}", DeleteDocument)
             .WithName("DeleteDocument")
             .Produces(StatusCodes.Status204NoContent)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         // Separate group for project-scoped documents
         var projectGroup = app.MapGroup("/api/v1/projects/{projectId:guid}/documents")
@@ -48,7 +50,7 @@ public static class DocumentEndpoints
         projectGroup.MapGet("/", ListProjectDocuments)
             .WithName("ListProjectDocuments")
             .Produces<List<DocumentResponse>>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceGuest");
+            .RequireAuthorization(WorkspaceRoles.Guest);
     }
 
     // ── GET /api/v1/documents ──
@@ -74,7 +76,7 @@ public static class DocumentEndpoints
         if (parentDocumentId.HasValue)
             query = query.Where(d => d.ParentDocumentId == parentDocumentId.Value);
 
-        var effectivePageSize = Math.Min(pageSize, 100);
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
         var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
 
         var documents = await query
@@ -85,7 +87,7 @@ public static class DocumentEndpoints
                 d.Id,
                 d.WorkspaceId,
                 d.Title,
-                d.Content,
+                null,
                 d.ContentFormat,
                 d.ProjectId,
                 d.ParentDocumentId,
@@ -206,7 +208,7 @@ public static class DocumentEndpoints
         if (document is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Document with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -236,7 +238,7 @@ public static class DocumentEndpoints
         if (document is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Document with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -299,7 +301,7 @@ public static class DocumentEndpoints
         if (document is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Document with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -324,7 +326,7 @@ public static class DocumentEndpoints
         int page = 1,
         int pageSize = 25)
     {
-        var effectivePageSize = Math.Min(pageSize, 100);
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
         var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
 
         var query = db.Documents.AsNoTracking()
@@ -345,7 +347,7 @@ public static class DocumentEndpoints
                 d.Id,
                 d.WorkspaceId,
                 d.Title,
-                d.Content,
+                null,
                 d.ContentFormat,
                 d.ProjectId,
                 d.ParentDocumentId,

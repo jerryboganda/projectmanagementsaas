@@ -1,5 +1,6 @@
 using FluentValidation;
 using LinearPrecision.Api.Entities;
+using LinearPrecision.Api.Infrastructure.Auth;
 using LinearPrecision.Api.Infrastructure.Persistence;
 using LinearPrecision.Api.Modules.Identity.Models;
 using LinearPrecision.Api.Modules.Identity.Services;
@@ -12,6 +13,14 @@ namespace LinearPrecision.Api.Modules.Identity.Endpoints;
 
 public static class UserEndpoints
 {
+    private static readonly string[] AllowedHubPaths =
+    [
+        "/hubs/board",
+        "/hubs/notifications",
+        "/hubs/presence",
+        "/hubs/ai-stream",
+    ];
+
     public static IEndpointRouteBuilder MapUserEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/users")
@@ -33,7 +42,8 @@ public static class UserEndpoints
             .WithName("ChangeCurrentUserPassword")
             .Produces(204)
             .ProducesValidationProblem()
-            .ProducesProblem(404);
+            .ProducesProblem(404)
+            .RequireRateLimiting("auth");
 
         group.MapGet("/me/workspaces", GetMyWorkspacesAsync)
             .WithName("GetCurrentUserWorkspaces")
@@ -41,10 +51,18 @@ public static class UserEndpoints
 
         group.MapPut("/me/active-workspace", SetActiveWorkspaceAsync)
             .WithName("SetCurrentUserActiveWorkspace")
-            .Produces<AuthSessionResponse>(200)
+            .Produces<AuthSessionBodyResponse>(200)
             .ProducesValidationProblem()
             .ProducesProblem(401)
             .ProducesProblem(403);
+
+        group.MapPost("/me/hub-token", CreateHubTokenAsync)
+            .WithName("CreateCurrentUserHubToken")
+            .Produces<HubTokenResponse>(200)
+            .ProducesValidationProblem()
+            .ProducesProblem(401)
+            .ProducesProblem(403)
+            .RequireRateLimiting("auth");
 
         return app;
     }
@@ -54,7 +72,7 @@ public static class UserEndpoints
         UserManager<User> userManager)
     {
         if (currentUser.UserId is null)
-            return Results.Problem(title: "Unauthorized", statusCode: 401);
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
 
         var user = await userManager.FindByIdAsync(currentUser.UserId.Value.ToString());
         if (user is null)
@@ -81,7 +99,7 @@ public static class UserEndpoints
         }
 
         if (currentUser.UserId is null)
-            return Results.Problem(title: "Unauthorized", statusCode: 401);
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
 
         var user = await userManager.FindByIdAsync(currentUser.UserId.Value.ToString());
         if (user is null)
@@ -105,14 +123,35 @@ public static class UserEndpoints
     private static async Task<IResult> ChangePasswordAsync(
         ChangePasswordRequest request,
         ICurrentUser currentUser,
-        UserManager<User> userManager)
+        UserManager<User> userManager,
+        SignInManager<User> signInManager,
+        ITokenService tokenService)
     {
         if (currentUser.UserId is null)
-            return Results.Problem(title: "Unauthorized", statusCode: 401);
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
 
         var user = await userManager.FindByIdAsync(currentUser.UserId.Value.ToString());
         if (user is null)
             return Results.NotFound();
+
+        var passwordResult = await signInManager.CheckPasswordSignInAsync(
+            user, request.CurrentPassword, lockoutOnFailure: true);
+
+        if (passwordResult.IsLockedOut)
+        {
+            return Results.Problem(
+                title: "Account locked",
+                detail: "Account is temporarily locked due to too many failed attempts.",
+                statusCode: 401);
+        }
+
+        if (!passwordResult.Succeeded)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(ChangePasswordRequest.CurrentPassword)] = ["Current password is incorrect."]
+            });
+        }
 
         var result = await userManager.ChangePasswordAsync(
             user, request.CurrentPassword, request.NewPassword);
@@ -127,6 +166,7 @@ public static class UserEndpoints
             return Results.ValidationProblem(errors);
         }
 
+        await tokenService.RevokeAllRefreshTokensForUserAsync(user.Id);
         return Results.NoContent();
     }
 
@@ -136,7 +176,7 @@ public static class UserEndpoints
         CancellationToken ct)
     {
         if (currentUser.UserId is null)
-            return Results.Problem(title: "Unauthorized", statusCode: 401);
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
 
         var userId = currentUser.UserId.Value;
 
@@ -183,13 +223,21 @@ public static class UserEndpoints
 
         if (currentUser.UserId is null)
         {
-            return Results.Problem(title: "Unauthorized", statusCode: 401);
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
         }
 
         var user = await userManager.FindByIdAsync(currentUser.UserId.Value.ToString());
         if (user is null)
         {
-            return Results.Problem(title: "Unauthorized", statusCode: 401);
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
+        }
+
+        if (!await userManager.IsEmailConfirmedAsync(user))
+        {
+            return Results.Problem(
+                title: "Email confirmation required",
+                detail: "Confirm your email address before requesting a new session.",
+                statusCode: StatusCodes.Status403Forbidden);
         }
 
         var isMember = await db.Memberships
@@ -203,7 +251,7 @@ public static class UserEndpoints
         if (!isMember)
         {
             return Results.Problem(
-                title: "Forbidden",
+                title: ProblemTitles.Forbidden,
                 detail: "You do not have access to this workspace.",
                 statusCode: StatusCodes.Status403Forbidden);
         }
@@ -213,7 +261,71 @@ public static class UserEndpoints
 
         var session = await tokenService.GenerateTokenPairAsync(user, request.WorkspaceId);
         AuthCookieHelper.SetRefreshTokenCookie(httpContext, session.RefreshToken);
-        return Results.Ok(session);
+        return Results.Ok(AuthCookieHelper.SessionResponseBody(httpContext, session));
+    }
+
+    private static async Task<IResult> CreateHubTokenAsync(
+        HubTokenRequest request,
+        ICurrentUser currentUser,
+        AppDbContext db,
+        UserManager<User> userManager,
+        JwtTokenGenerator jwtTokenGenerator,
+        CancellationToken ct)
+    {
+        if (currentUser.UserId is null)
+        {
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.HubPath)
+            || !AllowedHubPaths.Contains(request.HubPath, StringComparer.OrdinalIgnoreCase)
+            || request.WorkspaceId == Guid.Empty)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                [nameof(HubTokenRequest.HubPath)] = ["A supported hub path and workspace id are required."]
+            });
+        }
+
+        var user = await userManager.FindByIdAsync(currentUser.UserId.Value.ToString());
+        if (user is null || !user.IsActive)
+        {
+            return Results.Problem(title: ProblemTitles.Unauthorized, statusCode: 401);
+        }
+
+        if (!await userManager.IsEmailConfirmedAsync(user))
+        {
+            return Results.Problem(
+                title: "Email confirmation required",
+                detail: "Confirm your email address before requesting hub tokens.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var role = await db.Memberships
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(membership =>
+                membership.UserId == user.Id
+                && membership.WorkspaceId == request.WorkspaceId
+                && membership.IsActive)
+            .Select(membership => (MembershipRole?)membership.Role)
+            .FirstOrDefaultAsync(ct);
+
+        if (!role.HasValue)
+        {
+            return Results.Problem(
+                title: ProblemTitles.Forbidden,
+                detail: "You do not have access to this workspace.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var token = jwtTokenGenerator.GenerateHubAccessToken(
+            user,
+            role.Value,
+            request.WorkspaceId,
+            request.HubPath);
+
+        return Results.Ok(new HubTokenResponse(token, ExpiresIn: 60, TokenType: "Bearer"));
     }
 
     private static UserResponse MapToUserResponse(User user) => new(

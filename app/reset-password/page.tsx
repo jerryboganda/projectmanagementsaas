@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/ui/form-field";
 import { useToast } from "@/components/ui/toast";
@@ -14,12 +14,20 @@ export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
   const { resetPassword } = useAuth();
   const { toast } = useToast();
-  const email = useMemo(() => searchParams.get("email") ?? "", [searchParams]);
-  const token = useMemo(() => searchParams.get("token") ?? "", [searchParams]);
+  const [{ email, token }] = useState(() => ({
+    email: searchParams.get("email") ?? "",
+    token: searchParams.get("token") ?? "",
+  }));
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.has("email") || searchParams.has("token")) {
+      router.replace("/reset-password");
+    }
+  }, [router, searchParams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

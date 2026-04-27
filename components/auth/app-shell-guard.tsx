@@ -136,7 +136,7 @@ export function AppShellGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return publicPath ? <>{children}</> : <LoadingScreen label="Redirecting to login" />;
+    return publicPath ? <>{children}</> : <LoadingScreen label="Restoring your session" />;
   }
 
   if (AUTH_PATHS.has(pathname)) {

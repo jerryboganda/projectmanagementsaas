@@ -14,12 +14,12 @@ import {
   Monitor,
   Plus,
   Shield,
-  ShieldCheck,
   Trash2,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FormField } from '@/components/ui/form-field';
+import { MfaSection } from './mfa-section';
 
 interface Session {
   id: string;
@@ -108,9 +108,7 @@ export function SecurityPanel() {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  // 2FA section
-  const [twoFaEnabled, setTwoFaEnabled] = useState(false);
-  const [twoFaSetupOpen, setTwoFaSetupOpen] = useState(false);
+  // 2FA state is managed by <MfaSection /> via the auth API.
 
   // Sessions
   const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
@@ -303,89 +301,7 @@ export function SecurityPanel() {
         </section>
 
         {/* 2FA */}
-        <section className="space-y-6">
-          <div className="border-b border-neutral-border/60 pb-4">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-200">
-              <ShieldCheck className="size-4 text-primary" />
-              Two-Factor Authentication
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Add a second layer of security to your account with an authenticator app.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4 rounded-xl border border-neutral-border bg-neutral-surface/30 px-5 py-5 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className={cn('flex size-10 items-center justify-center rounded-full', twoFaEnabled ? 'bg-emerald-500/15' : 'bg-neutral-border/40')}>
-                <Shield className={cn('size-5', twoFaEnabled ? 'text-emerald-400' : 'text-slate-500')} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-slate-200">
-                  Authenticator App
-                  {twoFaEnabled && (
-                    <span className="ml-2 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
-                      Enabled
-                    </span>
-                  )}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {twoFaEnabled
-                    ? 'Your account is protected with TOTP 2FA.'
-                    : 'Use Google Authenticator, Authy, or any TOTP app.'}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                if (twoFaEnabled) {
-                  setTwoFaEnabled(false);
-                } else {
-                  setTwoFaSetupOpen(!twoFaSetupOpen);
-                }
-              }}
-              className={cn(
-                'rounded-md border px-4 py-2 text-sm font-medium transition-colors',
-                twoFaEnabled
-                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20'
-                  : 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/20',
-              )}
-            >
-              {twoFaEnabled ? 'Disable 2FA' : 'Enable 2FA'}
-            </button>
-          </div>
-
-          <AnimatePresence>
-            {twoFaSetupOpen && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden rounded-xl border border-neutral-border bg-neutral-surface/20 px-5 py-5"
-              >
-                <p className="mb-3 text-sm font-medium text-slate-200">Setup Instructions</p>
-                <ol className="space-y-2 text-sm text-slate-400">
-                  <li>1. Install Google Authenticator or Authy on your phone.</li>
-                  <li>2. Scan the QR code shown in the full setup flow (backend integration pending).</li>
-                  <li>3. Enter the 6-digit code from your app to verify and enable.</li>
-                </ol>
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={() => { setTwoFaEnabled(true); setTwoFaSetupOpen(false); }}
-                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
-                  >
-                    Mark as Enabled (demo)
-                  </button>
-                  <button
-                    onClick={() => setTwoFaSetupOpen(false)}
-                    className="rounded-md border border-neutral-border px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </section>
+        <MfaSection />
 
         {/* Active Sessions */}
         <section className="space-y-6">

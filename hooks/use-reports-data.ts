@@ -42,6 +42,9 @@ function reportsWorkloadQueryKey(workspaceId: string | null) {
   return [...reportsQueryKey(workspaceId), "workload"] as const;
 }
 
+const REPORT_TASK_PAGE_SIZE = 100;
+const REPORT_TASK_MAX_PAGES = 5;
+
 type ReportQueryState = {
   isLoading: boolean;
   error: Error | null;
@@ -381,6 +384,7 @@ export function useReportsData(selectedReportId: LiveReportId) {
     staleTime: 30_000,
     queryFn: async () =>
       apiClient.listProjects({
+        page: 1,
         pageSize: 100,
         sortBy: "name",
         sortOrder: "asc",
@@ -391,12 +395,26 @@ export function useReportsData(selectedReportId: LiveReportId) {
     queryKey: reportsTasksQueryKey(activeWorkspaceId),
     enabled: !!activeWorkspaceId,
     staleTime: 30_000,
-    queryFn: async () =>
-      apiClient.listTasks({
-        pageSize: 100,
-        sortBy: "createdAt",
-        sortOrder: "desc",
-      }),
+    queryFn: async () => {
+      const taskPages: TaskResponse[][] = [];
+
+      for (let page = 1; page <= REPORT_TASK_MAX_PAGES; page += 1) {
+        const pageTasks = await apiClient.listTasks({
+          page,
+          pageSize: REPORT_TASK_PAGE_SIZE,
+          sortBy: "createdAt",
+          sortOrder: "desc",
+        });
+
+        taskPages.push(pageTasks);
+
+        if (pageTasks.length < REPORT_TASK_PAGE_SIZE) {
+          break;
+        }
+      }
+
+      return taskPages.flat();
+    },
   });
 
   const velocityQuery = useQuery({

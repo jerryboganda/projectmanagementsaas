@@ -9,5 +9,5 @@ public class NotificationPreference : TenantEntity
     public string EventType { get; set; } = string.Empty;
     public bool InApp { get; set; } = true;
     public bool Email { get; set; } = true;
-    public bool Push { get; set; } = false;
+    public bool Push { get; set; }
 }

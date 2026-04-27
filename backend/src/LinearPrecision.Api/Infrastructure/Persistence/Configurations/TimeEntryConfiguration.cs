@@ -24,6 +24,11 @@ public sealed class TimeEntryConfiguration : IEntityTypeConfiguration<TimeEntry>
         builder.HasIndex(te => new { te.WorkspaceId, te.ProjectId })
             .HasDatabaseName("ix_time_entries_workspace_id_project_id");
 
+        // Partial index for running timers (start_time where end_time is null)
+        builder.HasIndex(te => te.StartTime)
+            .HasDatabaseName("ix_time_entries_start_time_running")
+            .HasFilter("end_time IS NULL");
+
         // ── Foreign keys ──
         builder.HasOne<Workspace>()
             .WithMany()

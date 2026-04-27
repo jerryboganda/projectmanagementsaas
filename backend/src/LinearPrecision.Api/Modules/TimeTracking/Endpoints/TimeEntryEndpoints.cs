@@ -9,18 +9,22 @@ namespace LinearPrecision.Api.Modules.TimeTracking.Endpoints;
 
 public static class TimeEntryEndpoints
 {
+    private const int DefaultPageSize = 100;
+    private const int MaxPageSize = 250;
+    private static readonly TimeSpan DefaultDateWindow = TimeSpan.FromDays(90);
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/time-entries")
             .WithTags("TimeTracking")
             .RequireAuthorization();
 
-        group.MapGet("/", ListTimeEntries).WithName("ListTimeEntries").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/", CreateTimeEntry).WithName("CreateTimeEntry").RequireAuthorization("WorkspaceMember");
-        group.MapPut("/{id:guid}", UpdateTimeEntry).WithName("UpdateTimeEntry").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{id:guid}", DeleteTimeEntry).WithName("DeleteTimeEntry").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/start", StartTimer).WithName("StartTimer").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/{id:guid}/stop", StopTimer).WithName("StopTimer").RequireAuthorization("WorkspaceMember");
+        group.MapGet("/", ListTimeEntries).WithName("ListTimeEntries").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/", CreateTimeEntry).WithName("CreateTimeEntry").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPut("/{id:guid}", UpdateTimeEntry).WithName("UpdateTimeEntry").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{id:guid}", DeleteTimeEntry).WithName("DeleteTimeEntry").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/start", StartTimer).WithName("StartTimer").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/{id:guid}/stop", StopTimer).WithName("StopTimer").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── GET /api/v1/time-entries ──
@@ -33,7 +37,9 @@ public static class TimeEntryEndpoints
         Guid? projectId = null,
         DateTime? startedAfter = null,
         DateTime? startedBefore = null,
-        bool? isBillable = null)
+        bool? isBillable = null,
+        int page = 1,
+        int pageSize = DefaultPageSize)
     {
         var query = db.TimeEntries.AsNoTracking().AsQueryable();
 
@@ -43,6 +49,10 @@ public static class TimeEntryEndpoints
             query = query.Where(t => t.TaskId == taskId.Value);
         if (projectId.HasValue)
             query = query.Where(t => t.ProjectId == projectId.Value);
+
+        if (!startedAfter.HasValue && !startedBefore.HasValue)
+            startedAfter = DateTime.UtcNow - DefaultDateWindow;
+
         if (startedAfter.HasValue)
             query = query.Where(t => t.StartTime >= startedAfter.Value);
         if (startedBefore.HasValue)
@@ -50,8 +60,13 @@ public static class TimeEntryEndpoints
         if (isBillable.HasValue)
             query = query.Where(t => t.IsBillable == isBillable.Value);
 
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var entries = await query
             .OrderByDescending(t => t.StartTime)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(t => new TimeEntryResponse(
                 t.Id,
                 new UserBriefResponse(t.User.Id, t.User.FullName, t.User.AvatarUrl),
@@ -141,17 +156,17 @@ public static class TimeEntryEndpoints
         if (entry is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Time entry with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
 
         // Only own entries or admin+ can update
-        var isAdmin = currentUser.Roles.Contains("WorkspaceAdmin") || currentUser.Roles.Contains("WorkspaceOwner");
+        var isAdmin = currentUser.Roles.Contains(WorkspaceRoles.Admin) || currentUser.Roles.Contains("WorkspaceOwner");
         if (entry.UserId != userId && !isAdmin)
         {
             return Results.Problem(
-                title: "Forbidden",
+                title: ProblemTitles.Forbidden,
                 detail: "You can only update your own time entries.",
                 statusCode: StatusCodes.Status403Forbidden);
         }
@@ -195,17 +210,17 @@ public static class TimeEntryEndpoints
         if (entry is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Time entry with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
 
         // Only own entries or admin+ can delete
-        var isAdmin = currentUser.Roles.Contains("WorkspaceAdmin") || currentUser.Roles.Contains("WorkspaceOwner");
+        var isAdmin = currentUser.Roles.Contains(WorkspaceRoles.Admin) || currentUser.Roles.Contains("WorkspaceOwner");
         if (entry.UserId != userId && !isAdmin)
         {
             return Results.Problem(
-                title: "Forbidden",
+                title: ProblemTitles.Forbidden,
                 detail: "You can only delete your own time entries.",
                 statusCode: StatusCodes.Status403Forbidden);
         }
@@ -233,7 +248,7 @@ public static class TimeEntryEndpoints
         if (hasRunningTimer)
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: "You already have a running timer. Stop it before starting a new one.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -282,7 +297,7 @@ public static class TimeEntryEndpoints
         if (entry is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Time entry with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -290,7 +305,7 @@ public static class TimeEntryEndpoints
         if (entry.UserId != userId)
         {
             return Results.Problem(
-                title: "Forbidden",
+                title: ProblemTitles.Forbidden,
                 detail: "You can only stop your own timer.",
                 statusCode: StatusCodes.Status403Forbidden);
         }
@@ -298,7 +313,7 @@ public static class TimeEntryEndpoints
         if (entry.EndTime.HasValue)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "This timer has already been stopped.",
                 statusCode: StatusCodes.Status400BadRequest);
         }

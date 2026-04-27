@@ -33,6 +33,9 @@ function workloadTasksQueryKey(workspaceId: string | null, projectId: string | n
   return ["workload", workspaceId, projectId, "tasks"] as const;
 }
 
+const WORKLOAD_TASK_PAGE_SIZE = 100;
+const WORKLOAD_TASK_MAX_PAGES = 2;
+
 function buildTaskViews(tasks: TaskResponse[], projects: ProjectResponse[]) {
   const projectNameById = new Map(projects.map((project) => [project.id, getProjectLabel(project)]));
 
@@ -103,6 +106,7 @@ export function useWorkloadData() {
     staleTime: 30_000,
     queryFn: async () =>
       apiClient.listProjects({
+        page: 1,
         pageSize: 100,
         sortBy: "name",
         sortOrder: "asc",
@@ -123,13 +127,27 @@ export function useWorkloadData() {
     queryKey: workloadTasksQueryKey(activeWorkspaceId, selectedProjectId),
     enabled: !!activeWorkspaceId,
     staleTime: 15_000,
-    queryFn: async () =>
-      apiClient.listTasks({
-        projectId: selectedProjectId ?? undefined,
-        pageSize: 200,
-        sortBy: "updatedAt",
-        sortOrder: "desc",
-      }),
+    queryFn: async () => {
+      const taskPages: TaskResponse[][] = [];
+
+      for (let page = 1; page <= WORKLOAD_TASK_MAX_PAGES; page += 1) {
+        const pageTasks = await apiClient.listTasks({
+          projectId: selectedProjectId ?? undefined,
+          page,
+          pageSize: WORKLOAD_TASK_PAGE_SIZE,
+          sortBy: "updatedAt",
+          sortOrder: "desc",
+        });
+
+        taskPages.push(pageTasks);
+
+        if (pageTasks.length < WORKLOAD_TASK_PAGE_SIZE) {
+          break;
+        }
+      }
+
+      return taskPages.flat();
+    },
   });
 
   const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);

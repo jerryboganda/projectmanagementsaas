@@ -8,6 +8,7 @@ import {
   type UpdateDocumentRequest,
 } from "@/lib/api/contracts";
 import { FOLDER_OPTIONS, type DocFolder, type DocRevision } from "@/hooks/use-documents-data";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   Bold,
   Check,
@@ -398,10 +399,13 @@ function CommentsPanel({
   const [newComment, setNewComment] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Reload comments when docId changes
-  useEffect(() => {
+  // Reload comments when docId changes — compare during render and reset
+  // synchronously instead of via useEffect.
+  const [prevDocId, setPrevDocId] = useState(docId);
+  if (prevDocId !== docId) {
+    setPrevDocId(docId);
     setComments(loadDocComments(docId));
-  }, [docId]);
+  }
 
   // Persist comments whenever they change
   useEffect(() => {
@@ -609,6 +613,7 @@ export function DocsEditor({
   revisions,
   onAddRevision,
 }: DocsEditorProps) {
+  const confirm = useConfirm();
   const [draftTitle, setDraftTitle] = useState(doc.title);
   const [draftContent, setDraftContent] = useState(toEditorContent(doc.content));
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -681,8 +686,13 @@ export function DocsEditor({
   };
 
   const handleDelete = async () => {
-    // eslint-disable-next-line no-alert
-    if (window.confirm(`Delete "${doc.title}"? This cannot be undone.`)) {
+    const ok = await confirm({
+      title: "Delete document",
+      message: `Delete "${doc.title}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (ok) {
       await onDelete(doc.id);
     }
   };
@@ -698,10 +708,13 @@ export function DocsEditor({
 
     // If unpublishing, require confirmation
     if (doc.isPublished) {
-      // eslint-disable-next-line no-alert
-      const confirmed = window.confirm(
-        "Unpublish this document? It will revert to draft status and may no longer be visible to viewers."
-      );
+      const confirmed = await confirm({
+        title: "Unpublish document",
+        message:
+          "Unpublish this document? It will revert to draft status and may no longer be visible to viewers.",
+        confirmLabel: "Unpublish",
+        tone: "danger",
+      });
       if (!confirmed) return;
     }
 

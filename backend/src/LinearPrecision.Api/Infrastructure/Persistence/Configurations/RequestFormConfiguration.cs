@@ -24,6 +24,10 @@ public sealed class RequestFormConfiguration : IEntityTypeConfiguration<RequestF
         builder.HasIndex(rf => new { rf.WorkspaceId, rf.IsActive })
             .HasDatabaseName("ix_request_forms_workspace_id_is_active");
 
+        // Public lookup by slug + active flag (global)
+        builder.HasIndex(rf => new { rf.Slug, rf.IsActive })
+            .HasDatabaseName("ix_request_forms_slug_is_active");
+
         // ── Foreign keys ──
         builder.HasOne<Workspace>()
             .WithMany()

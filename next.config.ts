@@ -1,35 +1,20 @@
 import type { NextConfig } from 'next';
 
-const isDev = process.env.NODE_ENV === 'development';
-
-// Next.js 15 injects inline hydration scripts; 'unsafe-inline' is required in
-// production unless we wire nonces end-to-end. CF Insights beacon is allowed
-// so Cloudflare analytics can load when proxied through CF.
-const cspDirectives = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com" + (isDev ? " 'unsafe-eval'" : ''),
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' https://picsum.photos data: blob:",
-  "font-src 'self'",
-  "connect-src 'self' https://static.cloudflareinsights.com wss: https:" + (isDev ? ' ws://localhost:* http://localhost:*' : ''),
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-  "upgrade-insecure-requests",
-].join('; ');
+// Note: Content-Security-Policy is emitted per-request by `proxy.ts` so it can
+// carry a fresh nonce. Static security headers below cover everything else.
 
 const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
-  { key: 'X-XSS-Protection', value: '1; mode=block' },
+  // X-XSS-Protection removed: deprecated and replaced by CSP.
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+  { key: 'Cross-Origin-Resource-Policy', value: 'same-site' },
   {
     key: 'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains; preload',
   },
-  { key: 'Content-Security-Policy', value: cspDirectives },
 ];
 
 const nextConfig: NextConfig = {
@@ -51,6 +36,10 @@ const nextConfig: NextConfig = {
   },
   output: 'standalone',
   transpilePackages: ['motion'],
+  // Next.js 16 enables Turbopack by default. Acknowledge the migration with an
+  // empty Turbopack config so our dev-only webpack hook below doesn't trigger
+  // the "webpack config without turbopack config" build error.
+  turbopack: {},
   async headers() {
     return [
       {

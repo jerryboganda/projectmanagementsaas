@@ -27,6 +27,14 @@ import {
   type IntakeSubmissionResponse,
   type InviteWorkspaceMemberRequest,
   type LoginRequest,
+  type LoginResult,
+  type HubTokenRequest,
+  type HubTokenResponse,
+  type DisableMfaRequest,
+  type SetupMfaRequest,
+  type SetupMfaResponse,
+  type VerifyMfaLoginRequest,
+  type VerifyMfaSetupRequest,
   type MarkAllReadResponse,
   type NotificationPreferenceResponse,
   type NotificationResponse,
@@ -41,7 +49,11 @@ import {
   type TaskResponse,
   type TimeEntryResponse,
   type RegisterRequest,
+  type RegistrationPendingResponse,
+  type ConfirmEmailRequest,
+  type ResendConfirmationRequest,
   type ResetPasswordRequest,
+  type SearchResponse,
   type UpdateDocumentRequest,
   type UpdateCalendarItemRequest,
   type UpdateGoalRequest,
@@ -303,16 +315,66 @@ export class LinearPrecisionApiClient {
   }
 
   register(input: RegisterRequest) {
-    return this.request<AuthSessionResponse>("/api/v1/auth/register", {
+    return this.request<RegistrationPendingResponse>("/api/v1/auth/register", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  confirmEmail(input: ConfirmEmailRequest) {
+    return this.request<void>("/api/v1/auth/confirm-email", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  resendEmailConfirmation(input: ResendConfirmationRequest) {
+    return this.request<void>("/api/v1/auth/resend-confirmation", {
       method: "POST",
       body: input,
     });
   }
 
   login(input: LoginRequest) {
-    return this.request<AuthSessionResponse>("/api/v1/auth/login", {
+    return this.request<LoginResult>("/api/v1/auth/login", {
       method: "POST",
       body: input,
+    });
+  }
+
+  verifyMfaLogin(input: VerifyMfaLoginRequest) {
+    return this.request<AuthSessionResponse>("/api/v1/auth/login/verify-mfa", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  setupMfa(input: SetupMfaRequest) {
+    return this.request<SetupMfaResponse>("/api/v1/auth/mfa/setup", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  verifyMfaSetup(input: VerifyMfaSetupRequest) {
+    return this.request<void>("/api/v1/auth/mfa/verify-setup", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  disableMfa(input: DisableMfaRequest) {
+    return this.request<void>("/api/v1/auth/mfa/disable", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  createHubToken(input: HubTokenRequest) {
+    return this.request<HubTokenResponse>("/api/v1/users/me/hub-token", {
+      method: "POST",
+      body: input,
+      workspaceId: null,
     });
   }
 
@@ -352,6 +414,10 @@ export class LinearPrecisionApiClient {
     return this.request<AuthUser>("/api/v1/users/me");
   }
 
+  search(params: { q: string; type?: string; projectId?: string; pageSize?: number }) {
+    return this.request<SearchResponse>(withQuery("/api/v1/search", params));
+  }
+
   updateCurrentUser(input: UpdateProfileRequest) {
     return this.request<AuthUser>("/api/v1/users/me", {
       method: "PUT",
@@ -365,6 +431,7 @@ export class LinearPrecisionApiClient {
     assigneeId?: string;
     status?: string;
     priority?: string;
+    page?: number;
     pageSize?: number;
     sortBy?: string;
     sortOrder?: string;
@@ -405,6 +472,7 @@ export class LinearPrecisionApiClient {
 
   listProjects(params: {
     status?: string;
+    page?: number;
     pageSize?: number;
     sortBy?: string;
     sortOrder?: string;
@@ -445,6 +513,7 @@ export class LinearPrecisionApiClient {
     status?: string;
     type?: string;
     ownerId?: string;
+    page?: number;
     pageSize?: number;
     sortBy?: string;
     sortOrder?: string;
@@ -591,6 +660,19 @@ export class LinearPrecisionApiClient {
   listSprints(projectId: string, params: { status?: string } = {}) {
     return this.request<SprintResponse[]>(
       withQuery(`/api/v1/projects/${projectId}/sprints`, params),
+    );
+  }
+
+  listSprintsBatch(projectIds: string[], params: { status?: string } = {}) {
+    if (projectIds.length === 0) {
+      return Promise.resolve([] as SprintResponse[]);
+    }
+
+    return this.request<SprintResponse[]>(
+      withQuery("/api/v1/sprints", {
+        ...params,
+        projectIds: projectIds.join(","),
+      }),
     );
   }
 
@@ -801,8 +883,13 @@ export class LinearPrecisionApiClient {
     );
   }
 
-  listWorkspaceMembers(workspaceId: string) {
-    return this.request<WorkspaceMemberResponse[]>(`/api/v1/workspaces/${workspaceId}/members`);
+  listWorkspaceMembers(
+    workspaceId: string,
+    params: { page?: number; pageSize?: number } = {},
+  ) {
+    return this.request<WorkspaceMemberResponse[]>(
+      withQuery(`/api/v1/workspaces/${workspaceId}/members`, params),
+    );
   }
 
   updateWorkspaceMemberRole(workspaceId: string, userId: string, role: WorkspaceMemberResponse["role"]) {
@@ -899,8 +986,10 @@ export class LinearPrecisionApiClient {
 
   // ─── Task Comments ────────────────────────────────────────────────────────
 
-  listTaskComments(taskId: string) {
-    return this.request<TaskCommentResponse[]>(`/api/v1/tasks/${taskId}/comments`);
+  listTaskComments(taskId: string, params: { page?: number; pageSize?: number } = {}) {
+    return this.request<TaskCommentResponse[]>(
+      withQuery(`/api/v1/tasks/${taskId}/comments`, params),
+    );
   }
 
   createTaskComment(taskId: string, input: CreateTaskCommentRequest) {
@@ -921,8 +1010,10 @@ export class LinearPrecisionApiClient {
 
   // ─── Task Checklist ───────────────────────────────────────────────────────
 
-  listTaskChecklist(taskId: string) {
-    return this.request<TaskChecklistItemResponse[]>(`/api/v1/tasks/${taskId}/checklist`);
+  listTaskChecklist(taskId: string, params: { page?: number; pageSize?: number } = {}) {
+    return this.request<TaskChecklistItemResponse[]>(
+      withQuery(`/api/v1/tasks/${taskId}/checklist`, params),
+    );
   }
 
   createTaskChecklistItem(taskId: string, input: CreateChecklistItemRequest) {
@@ -949,8 +1040,10 @@ export class LinearPrecisionApiClient {
 
   // ─── Task Watchers ────────────────────────────────────────────────────────
 
-  listTaskWatchers(taskId: string) {
-    return this.request<TaskWatcherResponse[]>(`/api/v1/tasks/${taskId}/watchers`);
+  listTaskWatchers(taskId: string, params: { page?: number; pageSize?: number } = {}) {
+    return this.request<TaskWatcherResponse[]>(
+      withQuery(`/api/v1/tasks/${taskId}/watchers`, params),
+    );
   }
 
   addTaskWatcher(taskId: string, input: { userId: string }) {
@@ -968,8 +1061,10 @@ export class LinearPrecisionApiClient {
 
   // ─── File Attachments ─────────────────────────────────────────────────────
 
-  listTaskAttachments(taskId: string) {
-    return this.request<FileAttachmentResponse[]>(`/api/v1/tasks/${taskId}/attachments`);
+  listTaskAttachments(taskId: string, params: { page?: number; pageSize?: number } = {}) {
+    return this.request<FileAttachmentResponse[]>(
+      withQuery(`/api/v1/tasks/${taskId}/attachments`, params),
+    );
   }
 
   uploadTaskAttachment(

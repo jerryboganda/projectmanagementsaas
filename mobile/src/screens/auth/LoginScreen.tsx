@@ -16,7 +16,7 @@ import {
 import { api, ApiError } from '../../api/client';
 
 /**
- * Login — LP aesthetic, capability-gated biometric button, real error state,
+ * Login - LP aesthetic, capability-gated biometric button, real error state,
  * email + password client-side validation. Wired to POST /api/v1/auth/login.
  * On success: access token in memory, refresh token in Preferences, and if
  * biometrics are available we enroll the refresh token into the Keychain/Keystore
@@ -28,6 +28,9 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [cap, setCap] = useState<BiometricCapability | null>(null);
 
   useEffect(() => {
@@ -37,6 +40,8 @@ export function LoginScreen() {
   async function signIn(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setNeedsEmailConfirmation(false);
+    setResendMessage(null);
     if (!email || !password) {
       setError('Email and password are required.');
       return;
@@ -58,14 +63,38 @@ export function LoginScreen() {
         try {
           await enrollBiometric(session.user.email, session.refreshToken);
         } catch {
-          /* enrollment is best-effort — don't block login */
+          /* enrollment is best-effort - don't block login */
         }
       }
       navigate('/', { replace: true });
     } catch (err) {
-      setError(toMessage(err, 'Sign-in failed. Try again.'));
+      if (isEmailConfirmationRequired(err)) {
+        setNeedsEmailConfirmation(true);
+        setError('Confirm your email address before signing in.');
+      } else {
+        setError(toMessage(err, 'Sign-in failed. Try again.'));
+      }
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleResendConfirmation() {
+    if (!email.trim()) {
+      setError('Enter your email address first.');
+      return;
+    }
+
+    setError(null);
+    setResendMessage(null);
+    setResendBusy(true);
+    try {
+      await api.auth.resendConfirmation({ email: email.trim() });
+      setResendMessage('A fresh confirmation email is on its way.');
+    } catch (err) {
+      setError(toMessage(err, 'Could not resend confirmation email.'));
+    } finally {
+      setResendBusy(false);
     }
   }
 
@@ -139,6 +168,25 @@ export function LoginScreen() {
               className="w-full rounded-[4px] border border-[#1A1A1A] bg-[#111] px-3 py-3 text-[14px] text-slate-100 outline-none focus:border-[#0066FF] transition-colors"
             />
           </label>
+
+          {resendMessage ? (
+            <div className="rounded-[4px] border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300">
+              {resendMessage}
+            </div>
+          ) : null}
+
+          {needsEmailConfirmation ? (
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={resendBusy}
+              className="flex w-full items-center justify-center gap-2 rounded-[4px] border border-[#222] bg-[#111] py-3 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-slate-100 active:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {resendBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+              {resendBusy ? 'Sending...' : 'Resend confirmation'}
+            </button>
+          ) : null}
+
           <label className="block">
             <span className="mb-1.5 block font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
               Password
@@ -170,7 +218,7 @@ export function LoginScreen() {
             className="flex w-full items-center justify-center gap-2 rounded-[4px] bg-[#0066FF] py-3 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-white active:opacity-90 disabled:opacity-50 transition-opacity"
           >
             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-            {busy ? 'Signing inâ€¦' : 'Sign in'}
+            {busy ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
 
@@ -195,6 +243,29 @@ export function LoginScreen() {
         </div>
       </div>
     </div>
+  );
+}
+
+function isEmailConfirmationRequired(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 403) {
+    return false;
+  }
+
+  const problem = err.problem;
+  const text = [
+    typeof problem === 'object' && problem !== null && 'type' in problem ? problem.type : null,
+    typeof problem === 'object' && problem !== null && 'title' in problem ? problem.title : null,
+    typeof problem === 'object' && problem !== null && 'detail' in problem ? problem.detail : null,
+    err.message,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLowerCase();
+
+  return (
+    text.includes('email-confirmation-required') ||
+    text.includes('email confirmation required') ||
+    text.includes('confirm your email')
   );
 }
 

@@ -16,8 +16,8 @@ public static class InitiativeEndpoints
             .WithTags("Goals")
             .RequireAuthorization();
 
-        group.MapPost("/", CreateInitiative).WithName("CreateInitiative").RequireAuthorization("WorkspaceMember");
-        group.MapPut("/{initId:guid}", UpdateInitiative).WithName("UpdateInitiative").RequireAuthorization("WorkspaceMember");
+        group.MapPost("/", CreateInitiative).WithName("CreateInitiative").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPut("/{initId:guid}", UpdateInitiative).WithName("UpdateInitiative").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── POST /api/v1/goals/{goalId}/initiatives ──
@@ -39,7 +39,7 @@ public static class InitiativeEndpoints
         if (!await db.Goals.AnyAsync(g => g.Id == goalId && !g.IsDeleted, ct))
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Goal with id '{goalId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -100,7 +100,7 @@ public static class InitiativeEndpoints
         if (initiative is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Initiative with id '{initId}' was not found for goal '{goalId}'.",
                 statusCode: StatusCodes.Status404NotFound);
         }

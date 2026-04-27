@@ -17,7 +17,7 @@ public class EnvironmentHealthTests
         _fixture = fixture;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Ready_health_check_should_report_healthy_and_database_should_be_migrated()
     {
         var client = _fixture.CreateClient();

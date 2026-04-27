@@ -48,13 +48,15 @@ export function CreateProjectModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (identifierTouched) {
-      return;
+  // Auto-derive identifier from name until the user edits it manually.
+  // Compare during render so the derived identifier appears in the same paint
+  // as the name change.
+  if (!identifierTouched) {
+    const derived = buildProjectIdentifier(name);
+    if (identifier !== derived) {
+      setIdentifier(derived);
     }
-
-    setIdentifier(buildProjectIdentifier(name));
-  }, [identifierTouched, name]);
+  }
 
   const resetForm = () => {
     setName("");

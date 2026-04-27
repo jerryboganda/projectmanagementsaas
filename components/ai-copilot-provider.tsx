@@ -111,18 +111,34 @@ export function AiCopilotProvider({ children }: { children: ReactNode }) {
     };
   }, [isOpen, activeWorkspaceId, apiClient]);
 
+  // Refresh provider settings when the AI copilot opens. This is a legitimate
+  // external-data fetch \u2014 useSyncExternalStore doesn't fit (no subscription)
+  // and the work must run in an effect (post-commit). The setState happens
+  // inside the awaited callback, not synchronously inside the effect body, so
+  // the rule's "cascading render" concern doesn't apply here.
   useEffect(() => {
     if (!isOpen || !activeWorkspaceId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch-on-open; no synchronous setState in effect body
     void refreshProviderSettings();
   }, [isOpen, activeWorkspaceId, refreshProviderSettings]);
 
-  useEffect(() => {
-    loadedForWorkspaceRef.current = null;
+  // Reset all conversation state when the active workspace changes. Compare
+  // during render so the stale workspace's data is cleared synchronously
+  // before the new workspace's load effect fires.
+  const [prevWorkspaceId, setPrevWorkspaceId] = useState(activeWorkspaceId);
+  if (prevWorkspaceId !== activeWorkspaceId) {
+    setPrevWorkspaceId(activeWorkspaceId);
     setConversations([]);
     setActiveConversationId(null);
     setMessages([]);
     setProviderSettings(null);
     setSendError(null);
+  }
+  // Ref reset stays in an effect (refs cannot be mutated during render). The
+  // load effect above re-runs anyway because activeWorkspaceId is a dep, so
+  // this just clears the cache flag post-commit.
+  useEffect(() => {
+    loadedForWorkspaceRef.current = null;
   }, [activeWorkspaceId]);
 
   const selectConversation = useCallback(

@@ -21,7 +21,7 @@ public class TaskEndpointTests
         _fixture = fixture;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Unauthenticated_request_should_return_401()
     {
         var client = _fixture.CreateClient();
@@ -31,11 +31,12 @@ public class TaskEndpointTests
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Create_task_without_workspace_header_should_fail()
     {
         var client = _fixture.CreateClient();
         var (authedClient, _) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"task-test-{Guid.NewGuid():N}@test.com");
 

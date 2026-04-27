@@ -330,3 +330,41 @@ After the reports, docs, and sprints migrations landed, the workload page was st
 - Reports no longer fail closed when a non-selected analytics query is slow or unavailable.
 - Team Velocity and Workload exports now map to their own backend datasets instead of silently downloading the tasks report.
 - The remaining major mock-heavy backlog is now centered on intake, timeline, portfolio, automations, templates, and deeper follow-on work for board, settings, reports, and workload contracts.
+
+---
+
+## 2026-04-26 - Confirmed Email Required Before Auth Sessions
+
+### Context
+The auth security audit left email confirmation as the final account lifecycle gap after rate limiting, refresh-token hardening, MFA, password reset/session revocation, and hub-scoped SignalR tokens were implemented.
+
+### Decisions
+- Require confirmed email/account in ASP.NET Core Identity before authentication sessions can be issued.
+- Keep registration as a workspace-creation flow, but return `RegistrationPendingResponse` instead of an access/refresh token pair.
+- Add anonymous `POST /api/v1/auth/confirm-email` and enumeration-safe `POST /api/v1/auth/resend-confirmation` endpoints under the existing `auth` rate limiter.
+- Reject unconfirmed users at every session or token boundary: login, MFA login verification, refresh, active-workspace session refresh, hub-token issuance, and invitation acceptance.
+- Align web and mobile clients so registration shows a confirmation-required state and login can resend confirmation emails when a confirmed address is required.
+
+### Consequences
+- Browser and mobile clients must not expect a session from registration.
+- Existing unconfirmed accounts cannot sign in until they complete the confirmation flow.
+- Confirmation links use the frontend `/confirm-email` route, which scrubs email/token query parameters after reading them.
+
+---
+
+## 2026-04-26 - Backend API Performance Guardrails
+
+### Context
+The backend/API performance audit identified a confirmed workload export N+1, several heavy list/detail endpoints without defensive bounds, repeated aggregate-query patterns, low-risk read paths suitable for cache-aside, and worker jobs that could overlap or materialize too much data at once.
+
+### Decisions
+- Keep existing frontend-facing response shapes while adding bounded `page`/`pageSize` defaults and maximums to heavy list endpoints.
+- Use set-based grouped aggregates for workload export, project metrics, and sprint task counts instead of repeated per-row or per-status count queries.
+- Omit document body content from document list responses while preserving full content on document detail responses.
+- Use short distributed-cache TTLs for low-risk plan, feature-flag, and workspace-role reads, with mutation-side invalidation where role or feature-flag state changes.
+- Add Hangfire concurrency guards and batch limits to recurring cleanup/digest jobs.
+
+### Consequences
+- Clients that need broad task, sprint, time-entry, intake, team, usage, or form datasets should page explicitly rather than relying on unbounded default results.
+- Workspace stats remain sequential because parallelizing queries on the scoped EF Core `DbContext` would be unsafe without introducing separate contexts.
+- Integration environments should apply the request-submission ordering-index migration before measuring intake-submission query performance.

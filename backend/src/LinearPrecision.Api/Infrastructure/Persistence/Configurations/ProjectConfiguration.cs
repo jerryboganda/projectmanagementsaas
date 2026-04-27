@@ -40,6 +40,16 @@ public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.HasIndex(p => new { p.WorkspaceId, p.IsDeleted })
             .HasDatabaseName("ix_projects_workspace_id_is_deleted");
 
+        builder.HasIndex(p => new { p.WorkspaceId, p.Name })
+            .HasDatabaseName("ix_projects_workspace_id_name");
+
+        builder.HasIndex(p => new { p.WorkspaceId, p.SortOrder })
+            .HasDatabaseName("ix_projects_workspace_id_sort_order");
+
+        builder.HasIndex(p => p.DeletedAt)
+            .HasDatabaseName("ix_projects_deleted_at")
+            .HasFilter("is_deleted = true");
+
         builder.HasIndex(p => p.LeadId)
             .HasDatabaseName("ix_projects_lead_id");
 

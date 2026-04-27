@@ -34,6 +34,10 @@ public sealed class InvitationConfiguration : IEntityTypeConfiguration<Invitatio
         builder.HasIndex(i => i.ExpiresAt)
             .HasDatabaseName("ix_invitations_expires_at");
 
+        // Index to support fast pending-invitation expiry scans
+        builder.HasIndex(i => new { i.Status, i.ExpiresAt })
+            .HasDatabaseName("ix_invitations_status_expires_at");
+
         // ── FK: WorkspaceId -> Workspaces CASCADE (configured from Workspace side) ──
 
         // ── FK: InvitedBy -> Users (NoAction/Restrict) ──

@@ -8,16 +8,38 @@ namespace LinearPrecision.Api.Modules.Files.Endpoints;
 
 public static class FileEndpoints
 {
+    // F-09: MIME allowlist for user uploads. Rejects executables, scripts, and unknown
+    // types up-front so they never reach object storage.
+    private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Images
+        "image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml",
+        // Documents
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        // Text / data
+        "text/plain", "text/csv", "text/markdown", "application/json",
+        // Archives
+        "application/zip",
+    };
+
+    // F-09: 25 MB hard cap per upload.
+    private const long MaxUploadSizeBytes = 25L * 1024 * 1024;
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/files")
             .WithTags("Files")
             .RequireAuthorization();
 
-        group.MapPost("/upload/presign", PresignUpload).WithName("PresignUpload").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/upload/{fileId:guid}/confirm", ConfirmUpload).WithName("ConfirmUpload").RequireAuthorization("WorkspaceMember");
-        group.MapGet("/{id:guid}/url", GetDownloadUrl).WithName("GetFileDownloadUrl").RequireAuthorization("WorkspaceGuest");
-        group.MapDelete("/{id:guid}", DeleteFile).WithName("DeleteFile").RequireAuthorization("WorkspaceMember");
+        group.MapPost("/upload/presign", PresignUpload).WithName("PresignUpload").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/upload/{fileId:guid}/confirm", ConfirmUpload).WithName("ConfirmUpload").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapGet("/{id:guid}/url", GetDownloadUrl).WithName("GetFileDownloadUrl").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapDelete("/{id:guid}", DeleteFile).WithName("DeleteFile").RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── POST /api/v1/files/upload/presign ──
@@ -55,12 +77,45 @@ public static class FileEndpoints
             });
         }
 
+        // F-09: enforce upload size cap.
+        if (request.SizeBytes > MaxUploadSizeBytes)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["sizeBytes"] = [$"File size exceeds the {MaxUploadSizeBytes / (1024 * 1024)} MB limit."]
+            });
+        }
+
+        // F-09: enforce MIME allowlist. The presigned URL still relies on the client
+        // to send the matching Content-Type header; backend validation here is the
+        // only line of defense before MinIO accepts the PUT.
+        if (!AllowedContentTypes.Contains(request.ContentType))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["contentType"] = [$"Content type '{request.ContentType}' is not allowed."]
+            });
+        }
+
+        // F-09: strip path separators from the user-supplied file name to keep the
+        // storage key well-formed and avoid surprising bucket layouts.
+        var safeFileName = Path.GetFileName(request.FileName)
+            .Replace("\\", string.Empty, StringComparison.Ordinal)
+            .Replace("/", string.Empty, StringComparison.Ordinal);
+        if (string.IsNullOrWhiteSpace(safeFileName))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["fileName"] = ["File name is invalid."]
+            });
+        }
+
         // Generate a unique storage key
-        var storageKey = $"uploads/{Guid.NewGuid():N}/{request.FileName}";
+        var storageKey = $"uploads/{Guid.NewGuid():N}/{safeFileName}";
 
         var file = new FileAttachment
         {
-            FileName = request.FileName,
+            FileName = safeFileName,
             StorageKey = storageKey,
             ContentType = request.ContentType,
             SizeBytes = request.SizeBytes,
@@ -96,7 +151,7 @@ public static class FileEndpoints
         if (file is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"File with id '{fileId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -129,7 +184,7 @@ public static class FileEndpoints
         if (file is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"File with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -153,7 +208,7 @@ public static class FileEndpoints
         if (file is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"File with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

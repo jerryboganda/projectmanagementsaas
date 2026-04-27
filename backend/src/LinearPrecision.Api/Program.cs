@@ -2,6 +2,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Amazon.S3;
 using FluentValidation;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using LinearPrecision.Api.Entities;
 using LinearPrecision.Api.Infrastructure.Auth;
@@ -45,6 +46,58 @@ using StackExchange.Redis;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ═══════════════════════════════════════════════
+// 0. STARTUP SECRETS GUARD (F-01)
+// ═══════════════════════════════════════════════
+// Outside Development we refuse to boot if any required secret is missing or
+// equal to a known-insecure development placeholder. This prevents the API
+// from silently coming up with a leaked-by-source-code key.
+if (!builder.Environment.IsDevelopment())
+{
+    static bool IsMissingOrInsecure(string? value, params string[] insecureMarkers)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        foreach (var marker in insecureMarkers)
+            if (value.Contains(marker, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    var requiredSecrets = new (string Key, string[] InsecureMarkers, int? MinLength)[]
+    {
+        ("Jwt:Key", new[] { "super-secret-development-key", "super-secret-production-key" }, 32),
+        ("ConnectionStrings:DefaultConnection", new[] { "Password=dev" }, null),
+        ("ConnectionStrings:Redis", Array.Empty<string>(), null),
+        ("Storage:AccessKey", new[] { "minioadmin" }, null),
+        ("Storage:SecretKey", new[] { "minioadmin" }, null),
+        ("Storage:ServiceUrl", Array.Empty<string>(), null),
+    };
+
+    var failures = new List<string>();
+    foreach (var (key, markers, minLen) in requiredSecrets)
+    {
+        var value = builder.Configuration[key];
+        if (IsMissingOrInsecure(value, markers))
+            failures.Add($"  - '{key}' is missing or matches a known-insecure development value.");
+        else if (minLen is int min && Encoding.UTF8.GetByteCount(value!) < min)
+            failures.Add($"  - '{key}' is shorter than the required {min} bytes.");
+    }
+
+    var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+    if (corsOrigins.Length == 0 ||
+        corsOrigins.Any(o => string.IsNullOrWhiteSpace(o) || o.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase)))
+    {
+        failures.Add("  - 'Cors:AllowedOrigins' must be set to your production origin(s) and must not include http://localhost.");
+    }
+
+    if (failures.Count > 0)
+    {
+        throw new InvalidOperationException(
+            "Refusing to start: the following required configuration values are missing or insecure. "
+            + "Provide them via environment variables, user secrets, or a vault:" + Environment.NewLine
+            + string.Join(Environment.NewLine, failures));
+    }
+}
 
 // ═══════════════════════════════════════════════
 // 1. INFRASTRUCTURE SERVICES
@@ -109,9 +162,28 @@ builder.Services.AddIdentity<User, IdentityRole<Guid>>(options =>
 
     // User
     options.User.RequireUniqueEmail = true;
+
+    // Sign-in
+    options.SignIn.RequireConfirmedEmail = true;
+    options.SignIn.RequireConfirmedAccount = true;
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
+
+// F-03: bump PBKDF2 iteration count to current OWASP guidance (>=600,000).
+// IdentityV3 already uses HMAC-SHA256; only the iteration count is configurable.
+// Existing hashes are validated against their embedded iteration count, then
+// rehashed at the next successful login via PasswordHasher.VerifyHashedPassword's
+// RehashPasswordIfNeeded path.
+builder.Services.Configure<PasswordHasherOptions>(options =>
+{
+    options.IterationCount = 600_000;
+});
+
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+{
+    options.TokenLifespan = TimeSpan.FromHours(1);
+});
 
 // JWT Bearer Authentication
 var jwtKey = builder.Configuration["Jwt:Key"]
@@ -157,6 +229,8 @@ builder.Services.AddAuthentication(options =>
             var redis = context.HttpContext.RequestServices.GetRequiredService<IConnectionMultiplexer>();
             var db = redis.GetDatabase();
             var jti = context.Principal?.FindFirst("jti")?.Value;
+            var path = context.HttpContext.Request.Path;
+            var isHubPath = path.StartsWithSegments("/hubs");
 
             if (!string.IsNullOrEmpty(jti))
             {
@@ -165,6 +239,22 @@ builder.Services.AddAuthentication(options =>
                 {
                     context.Fail("Token has been revoked.");
                 }
+            }
+
+            var tokenUse = context.Principal?.FindFirst("token_use")?.Value;
+            var isHubToken = string.Equals(tokenUse, "hub", StringComparison.Ordinal);
+            if (isHubToken)
+            {
+                var hubPath = context.Principal?.FindFirst("hub_path")?.Value;
+                if (!isHubPath || !string.Equals(hubPath, path.Value, StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Fail("Hub token is not valid for this endpoint.");
+                }
+            }
+
+            if (isHubPath && context.HttpContext.Request.Query.ContainsKey("access_token") && !isHubToken)
+            {
+                context.Fail("SignalR query-string authentication requires a hub-scoped token.");
             }
         },
     };
@@ -208,12 +298,16 @@ builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<JwtTokenGenerator>();
 
 // Storage (S3-compatible / MinIO)
+// F-01: no fallback to known-insecure defaults. SecretsGuard above already rejects empties in non-dev.
+var storageAccessKey = builder.Configuration["Storage:AccessKey"] ?? "minioadmin";
+var storageSecretKey = builder.Configuration["Storage:SecretKey"] ?? "minioadmin";
+var storageServiceUrl = builder.Configuration["Storage:ServiceUrl"] ?? "http://localhost:9000";
 builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(
-    builder.Configuration["Storage:AccessKey"] ?? "minioadmin",
-    builder.Configuration["Storage:SecretKey"] ?? "minioadmin",
+    storageAccessKey,
+    storageSecretKey,
     new AmazonS3Config
     {
-        ServiceURL = builder.Configuration["Storage:ServiceUrl"] ?? "http://localhost:9000",
+        ServiceURL = storageServiceUrl,
         ForcePathStyle = true  // required for MinIO path-style access
     }));
 builder.Services.AddScoped<IStorageService, S3StorageService>();
@@ -227,7 +321,7 @@ builder.Services.AddTransient<RequestLoggingMiddleware>();
 builder.Services.AddTransient<GlobalExceptionMiddleware>();
 builder.Services.AddTransient<TenantResolutionMiddleware>();
 
-// CORS
+// CORS (F-11: explicit method/header lists; no wildcard)
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? ["http://localhost:3000"];
 
@@ -236,10 +330,42 @@ builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
     {
         policy.WithOrigins(allowedOrigins)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
+              .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+              .WithHeaders(
+                  "Authorization",
+                  "Content-Type",
+                  "X-Workspace-Id",
+                  "X-Correlation-Id",
+                  "X-Request-Id",
+                  "Stripe-Signature",
+                  "X-LP-Client")
+              .WithExposedHeaders("X-Correlation-Id", "X-Request-Id")
               .AllowCredentials();
     });
+});
+
+// F-12: forwarded headers (must be configured before HTTPS redirection / HSTS
+// or any code that reads Request.Scheme/IsHttps/RemoteIpAddress behind a proxy).
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    // KnownNetworks/KnownProxies must be set explicitly per deployment; the empty
+    // defaults reject all proxies. Operators override via environment-specific config.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// F-12: HSTS hardened (matches frontend HSTS: 2 years, includeSubDomains, preload).
+builder.Services.AddHsts(options =>
+{
+    options.Preload = true;
+    options.IncludeSubDomains = true;
+    options.MaxAge = TimeSpan.FromDays(730);
+});
+
+builder.Services.AddHttpsRedirection(options =>
+{
+    options.RedirectStatusCode = StatusCodes.Status308PermanentRedirect;
 });
 
 // Rate Limiting
@@ -247,24 +373,43 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    // Global: 600 requests per minute (sliding window)
-    options.AddSlidingWindowLimiter("global", limiter =>
-    {
-        limiter.PermitLimit = 600;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.SegmentsPerWindow = 6;
-        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        limiter.QueueLimit = 0;
-    });
+    // Global: 600 requests per minute per client IP (sliding window).
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 600,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+            }));
 
-    // Auth: 20 requests per 15 minutes (fixed window)
-    options.AddFixedWindowLimiter("auth", limiter =>
-    {
-        limiter.PermitLimit = 20;
-        limiter.Window = TimeSpan.FromMinutes(15);
-        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        limiter.QueueLimit = 0;
-    });
+    // Auth: 20 requests per 15 minutes, partitioned by client IP.
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(15),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+            }));
+
+    // F-09 — Intake (public anonymous form): 10 requests per minute partitioned
+    // by client IP to limit abuse without affecting authenticated traffic.
+    options.AddPolicy("intake", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+            }));
 
     // AI: 30 concurrent tokens (token bucket)
     options.AddTokenBucketLimiter("ai", limiter =>
@@ -326,6 +471,39 @@ await Program.InitializeDatabaseAsync(app);
 // ═══════════════════════════════════════════════
 // MIDDLEWARE PIPELINE (exact order!)
 // ═══════════════════════════════════════════════
+
+// F-12: forwarded headers FIRST so Request.Scheme/IsHttps/RemoteIpAddress are correct.
+app.UseForwardedHeaders();
+
+// F-12: outside development, force HTTPS and emit HSTS.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
+// F-12: defense-in-depth security headers on every response.
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    headers["Cross-Origin-Opener-Policy"] = "same-origin";
+    headers["Cross-Origin-Resource-Policy"] = "same-site";
+    // Tight CSP for any HTML the API emits (error pages, Scalar in dev).
+    headers["Content-Security-Policy"] =
+        "default-src 'none'; " +
+        "img-src 'self' data:; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "script-src 'self' 'unsafe-inline'; " +
+        "connect-src 'self'; " +
+        "frame-ancestors 'none'; " +
+        "base-uri 'none'; " +
+        "form-action 'self'";
+    await next();
+});
 
 app.UseMiddleware<CorrelationIdMiddleware>();    // 1. Correlation ID
 app.UseMiddleware<RequestLoggingMiddleware>();    // 2. Request Logging

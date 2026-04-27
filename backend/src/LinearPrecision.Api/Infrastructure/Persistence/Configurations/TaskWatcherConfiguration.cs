@@ -16,6 +16,9 @@ public sealed class TaskWatcherConfiguration : IEntityTypeConfiguration<TaskWatc
         builder.HasIndex(tw => tw.WorkspaceId)
             .HasDatabaseName("ix_task_watchers_workspace_id");
 
+        builder.HasIndex(tw => new { tw.TaskId, tw.CreatedAt })
+            .HasDatabaseName("ix_task_watchers_task_id_created_at");
+
         // ── FK: WorkspaceId -> Workspaces CASCADE ──
         // (Configured from Workspace side or by convention)
 

@@ -177,10 +177,22 @@ export function useBoardData(selectedTaskId?: string | null) {
     let disposed = false;
     let connection: HubConnection | null = null;
     let joinedProjectIds: string[] = [];
+    let tasksInvalidationTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleTasksInvalidation = () => {
+      if (tasksInvalidationTimeout) {
+        clearTimeout(tasksInvalidationTimeout);
+      }
+
+      tasksInvalidationTimeout = setTimeout(() => {
+        tasksInvalidationTimeout = null;
+        void queryClient.invalidateQueries({ queryKey: tasksQueryKey(activeWorkspaceId) });
+      }, 250);
+    };
 
     const invalidateBoardData = (payload: BoardHubPayload) => {
       const taskId = resolveTaskId(payload);
-      void queryClient.invalidateQueries({ queryKey: tasksQueryKey(activeWorkspaceId) });
+      scheduleTasksInvalidation();
 
       if (taskId && taskId === selectedTaskIdRef.current) {
         void Promise.all([
@@ -231,6 +243,10 @@ export function useBoardData(selectedTaskId?: string | null) {
 
     return () => {
       disposed = true;
+
+      if (tasksInvalidationTimeout) {
+        clearTimeout(tasksInvalidationTimeout);
+      }
 
       if (!connection) {
         return;

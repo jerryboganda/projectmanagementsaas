@@ -25,6 +25,10 @@ public sealed class InitiativeConfiguration : IEntityTypeConfiguration<Initiativ
         builder.HasIndex(i => new { i.WorkspaceId, i.Status })
             .HasDatabaseName("ix_initiatives_workspace_id_status");
 
+        builder.HasIndex(i => i.DeletedAt)
+            .HasDatabaseName("ix_initiatives_deleted_at")
+            .HasFilter("is_deleted = true");
+
         // ── FK: WorkspaceId -> Workspaces CASCADE ──
         // (Configured from Workspace side or by convention)
 

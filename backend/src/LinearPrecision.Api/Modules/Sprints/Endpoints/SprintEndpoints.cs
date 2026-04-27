@@ -10,24 +10,29 @@ namespace LinearPrecision.Api.Modules.Sprints.Endpoints;
 
 public static class SprintEndpoints
 {
+    private const int DefaultPageSize = 50;
+    private const int MaxPageSize = 100;
+    private const int MaxBatchProjectIds = 100;
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var projectGroup = app.MapGroup("/api/v1/projects/{projectId:guid}/sprints")
             .WithTags("Sprints")
             .RequireAuthorization();
 
-        projectGroup.MapGet("/", ListSprints).WithName("ListSprints").RequireAuthorization("WorkspaceMember");
-        projectGroup.MapPost("/", CreateSprint).WithName("CreateSprint").RequireAuthorization("WorkspaceMember");
+        projectGroup.MapGet("/", ListSprints).WithName("ListSprints").RequireAuthorization(WorkspaceRoles.Member);
+        projectGroup.MapPost("/", CreateSprint).WithName("CreateSprint").RequireAuthorization(WorkspaceRoles.Member);
 
         var group = app.MapGroup("/api/v1/sprints")
             .WithTags("Sprints")
             .RequireAuthorization();
 
-        group.MapGet("/{id:guid}", GetSprint).WithName("GetSprint").RequireAuthorization("WorkspaceGuest");
-        group.MapPut("/{id:guid}", UpdateSprint).WithName("UpdateSprint").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/{id:guid}/start", StartSprint).WithName("StartSprint").RequireAuthorization("WorkspaceMember");
-        group.MapPost("/{id:guid}/complete", CompleteSprint).WithName("CompleteSprint").RequireAuthorization("WorkspaceMember");
-        group.MapDelete("/{id:guid}", DeleteSprint).WithName("DeleteSprint").RequireAuthorization("WorkspaceAdmin");
+        group.MapGet("/", ListSprintsBatch).WithName("ListSprintsBatch").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapGet("/{id:guid}", GetSprint).WithName("GetSprint").RequireAuthorization(WorkspaceRoles.Guest);
+        group.MapPut("/{id:guid}", UpdateSprint).WithName("UpdateSprint").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/{id:guid}/start", StartSprint).WithName("StartSprint").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapPost("/{id:guid}/complete", CompleteSprint).WithName("CompleteSprint").RequireAuthorization(WorkspaceRoles.Member);
+        group.MapDelete("/{id:guid}", DeleteSprint).WithName("DeleteSprint").RequireAuthorization(WorkspaceRoles.Admin);
     }
 
     // ── GET /api/v1/projects/{projectId}/sprints ──
@@ -36,7 +41,9 @@ public static class SprintEndpoints
         AppDbContext db,
         ICurrentUser currentUser,
         CancellationToken ct,
-        string? status = null)
+        string? status = null,
+        int page = 1,
+        int pageSize = DefaultPageSize)
     {
         var query = db.Sprints.AsNoTracking()
             .Where(s => s.ProjectId == projectId);
@@ -44,8 +51,13 @@ public static class SprintEndpoints
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<SprintStatus>(status, true, out var ss))
             query = query.Where(s => s.Status == ss);
 
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var sprints = await query
             .OrderByDescending(s => s.CreatedAt)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(s => new SprintResponse(
                 s.Id,
                 s.ProjectId,
@@ -63,6 +75,96 @@ public static class SprintEndpoints
             .ToListAsync(ct);
 
         return Results.Ok(sprints);
+    }
+
+    // ── GET /api/v1/sprints ──
+    private static async Task<IResult> ListSprintsBatch(
+        AppDbContext db,
+        HttpRequest request,
+        CancellationToken ct,
+        string? status = null,
+        int page = 1,
+        int pageSize = DefaultPageSize)
+    {
+        if (!TryParseProjectIds(request, out var projectIds, out var invalidProjectId))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["projectIds"] = [$"The value '{invalidProjectId}' is not a valid project id."]
+            });
+        }
+
+        if (projectIds.Count > MaxBatchProjectIds)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["projectIds"] = [$"At most {MaxBatchProjectIds} project ids can be requested at once."]
+            });
+        }
+
+        var query = db.Sprints.AsNoTracking().AsQueryable();
+
+        if (projectIds.Count > 0)
+        {
+            var projectIdFilter = projectIds.Distinct().ToArray();
+            query = query.Where(s => projectIdFilter.Contains(s.ProjectId));
+        }
+
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<SprintStatus>(status, true, out var ss))
+            query = query.Where(s => s.Status == ss);
+
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
+        var sprints = await query
+            .OrderByDescending(s => s.CreatedAt)
+            .Skip(offset)
+            .Take(effectivePageSize)
+            .Select(s => new SprintResponse(
+                s.Id,
+                s.ProjectId,
+                s.Name,
+                s.Goal,
+                s.Status,
+                s.StartDate,
+                s.EndDate,
+                s.PlannedPoints,
+                s.CompletedPoints,
+                s.Tasks.Count(t => !t.IsDeleted),
+                s.Tasks.Count(t => !t.IsDeleted && t.Status == TaskItemStatus.Done),
+                s.CreatedAt,
+                s.UpdatedAt))
+            .ToListAsync(ct);
+
+        return Results.Ok(sprints);
+    }
+
+    private static bool TryParseProjectIds(
+        HttpRequest request,
+        out List<Guid> projectIds,
+        out string? invalidProjectId)
+    {
+        projectIds = [];
+        invalidProjectId = null;
+
+        foreach (var projectIdsValue in request.Query["projectIds"])
+        {
+            if (string.IsNullOrWhiteSpace(projectIdsValue))
+                continue;
+
+            foreach (var rawProjectId in projectIdsValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!Guid.TryParse(rawProjectId, out var projectId))
+                {
+                    invalidProjectId = rawProjectId;
+                    return false;
+                }
+
+                projectIds.Add(projectId);
+            }
+        }
+
+        return true;
     }
 
     // ── POST /api/v1/projects/{projectId}/sprints ──
@@ -84,7 +186,7 @@ public static class SprintEndpoints
         if (!await db.Projects.AnyAsync(p => p.Id == projectId, ct))
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Project with id '{projectId}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -141,7 +243,7 @@ public static class SprintEndpoints
         if (sprint is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Sprint with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -166,7 +268,7 @@ public static class SprintEndpoints
         if (sprint is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Sprint with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -178,12 +280,22 @@ public static class SprintEndpoints
 
         await db.SaveChangesAsync(ct);
 
+        var taskCounts = await db.TaskItems.AsNoTracking()
+            .Where(t => t.SprintId == id && !t.IsDeleted)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                Total = g.Count(),
+                Completed = g.Count(t => t.Status == TaskItemStatus.Done)
+            })
+            .FirstOrDefaultAsync(ct);
+
         return Results.Ok(new SprintResponse(
             sprint.Id, sprint.ProjectId, sprint.Name, sprint.Goal,
             sprint.Status, sprint.StartDate, sprint.EndDate,
             sprint.PlannedPoints, sprint.CompletedPoints,
-            await db.TaskItems.CountAsync(t => t.SprintId == id && !t.IsDeleted, ct),
-            await db.TaskItems.CountAsync(t => t.SprintId == id && !t.IsDeleted && t.Status == TaskItemStatus.Done, ct),
+            taskCounts?.Total ?? 0,
+            taskCounts?.Completed ?? 0,
             sprint.CreatedAt, sprint.UpdatedAt));
     }
 
@@ -198,7 +310,7 @@ public static class SprintEndpoints
         if (sprint is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Sprint with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -206,7 +318,7 @@ public static class SprintEndpoints
         if (sprint.Status != SprintStatus.Planned)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "Only planned sprints can be started.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
@@ -218,7 +330,7 @@ public static class SprintEndpoints
         if (hasActiveSprint)
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: "The project already has an active sprint. Complete it before starting a new one.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -240,7 +352,7 @@ public static class SprintEndpoints
         if (sprint is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Sprint with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -248,7 +360,7 @@ public static class SprintEndpoints
         if (sprint.Status != SprintStatus.Active)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "Only active sprints can be completed.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
@@ -276,7 +388,7 @@ public static class SprintEndpoints
         if (sprint is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Sprint with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

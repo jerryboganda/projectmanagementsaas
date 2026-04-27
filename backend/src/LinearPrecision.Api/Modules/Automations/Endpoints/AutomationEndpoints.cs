@@ -18,22 +18,22 @@ public static class AutomationEndpoints
         group.MapGet("/", ListAutomations)
             .WithName("ListAutomations")
             .Produces<List<AutomationRuleResponse>>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapPost("/", CreateAutomation)
             .WithName("CreateAutomation")
             .Produces<AutomationRuleResponse>(StatusCodes.Status201Created)
-            .RequireAuthorization("WorkspaceAdmin");
+            .RequireAuthorization(WorkspaceRoles.Admin);
 
         group.MapPut("/{id:guid}", UpdateAutomation)
             .WithName("UpdateAutomation")
             .Produces<AutomationRuleResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceAdmin");
+            .RequireAuthorization(WorkspaceRoles.Admin);
 
         group.MapDelete("/{id:guid}", DeleteAutomation)
             .WithName("DeleteAutomation")
             .Produces(StatusCodes.Status204NoContent)
-            .RequireAuthorization("WorkspaceAdmin");
+            .RequireAuthorization(WorkspaceRoles.Admin);
     }
 
     // ── GET /api/v1/automations ──
@@ -54,7 +54,7 @@ public static class AutomationEndpoints
         if (projectId.HasValue)
             query = query.Where(r => r.ProjectId == projectId.Value);
 
-        var effectivePageSize = Math.Min(pageSize, 100);
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
         var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
 
         var rules = await query
@@ -146,7 +146,7 @@ public static class AutomationEndpoints
         if (rule is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Automation rule with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -190,7 +190,7 @@ public static class AutomationEndpoints
         if (rule is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Automation rule with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

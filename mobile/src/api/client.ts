@@ -22,6 +22,9 @@ import {
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api/v1';
 
+const MOBILE_CLIENT_HEADER = 'X-LP-Client';
+const MOBILE_CLIENT_VALUE = 'mobile';
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -80,6 +83,21 @@ export interface RegisterBody {
   fullName: string;
 }
 
+export interface RegistrationPendingResponse {
+  email: string;
+  requiresEmailConfirmation: boolean;
+  message: string;
+}
+
+export interface ConfirmEmailBody {
+  email: string;
+  token: string;
+}
+
+export interface ResendConfirmationBody {
+  email: string;
+}
+
 export interface ForgotPasswordBody {
   email: string;
 }
@@ -110,7 +128,10 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, auth = true, skipWorkspace = false, signal, _retry = false } = opts;
   const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    [MOBILE_CLIENT_HEADER]: MOBILE_CLIENT_VALUE,
+  };
   if (auth) {
     const token = getAccessToken();
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -191,8 +212,14 @@ export const api = {
     login: (body: LoginBody): Promise<AuthSessionResponse> =>
       request<AuthSessionResponse>('/auth/login', { method: 'POST', body, auth: false }),
 
-    register: (body: RegisterBody): Promise<AuthSessionResponse> =>
-      request<AuthSessionResponse>('/auth/register', { method: 'POST', body, auth: false }),
+    register: (body: RegisterBody): Promise<RegistrationPendingResponse> =>
+      request<RegistrationPendingResponse>('/auth/register', { method: 'POST', body, auth: false }),
+
+    confirmEmail: (body: ConfirmEmailBody): Promise<void> =>
+      request<void>('/auth/confirm-email', { method: 'POST', body, auth: false }),
+
+    resendConfirmation: (body: ResendConfirmationBody): Promise<void> =>
+      request<void>('/auth/resend-confirmation', { method: 'POST', body, auth: false }),
 
     forgotPassword: (body: ForgotPasswordBody): Promise<void> =>
       request<void>('/auth/forgot-password', { method: 'POST', body, auth: false }),

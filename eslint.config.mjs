@@ -18,6 +18,7 @@ export default defineConfig([
       "playwright-report/",
       "test-results/",
       "scratch/",
+      "tools/",
     ],
   },
   {
@@ -40,6 +41,12 @@ export default defineConfig([
 
       // Next.js specific
       "@next/next/no-html-link-for-pages": "error",
+
+      // Next 16's React 19 strict-effects rule. All call sites have been
+      // refactored to use the React-recommended "compare during render"
+      // pattern (https://react.dev/reference/react/useState#storing-information-from-previous-renders)
+      // instead of resetting state inside useEffect.
+      "react-hooks/set-state-in-effect": "error",
     },
   },
 ]);

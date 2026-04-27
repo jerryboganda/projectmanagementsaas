@@ -1,89 +1,114 @@
 'use client';
 
-import { AlertTriangle } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Modal } from './modal';
+import { cn } from '@/lib/utils';
 
-type ConfirmVariant = 'danger' | 'warning';
-
-interface ConfirmDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  title: string;
-  message: string;
+export interface ConfirmOptions {
+  title?: string;
+  message: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
-  variant?: ConfirmVariant;
+  /**
+   * Visual treatment for the confirm button. `danger` is used for destructive
+   * actions (delete, unlink, discard).
+   */
+  tone?: 'default' | 'danger';
 }
 
-const variantStyles: Record<
-  ConfirmVariant,
-  { iconBg: string; iconColor: string; btnBg: string; btnHover: string }
-> = {
-  danger: {
-    iconBg: 'bg-rose-500/10',
-    iconColor: 'text-rose-500',
-    btnBg: 'bg-rose-600',
-    btnHover: 'hover:bg-rose-700',
-  },
-  warning: {
-    iconBg: 'bg-amber-500/10',
-    iconColor: 'text-amber-500',
-    btnBg: 'bg-amber-600',
-    btnHover: 'hover:bg-amber-700',
-  },
-};
+type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>;
 
-export function ConfirmDialog({
-  isOpen,
-  onClose,
-  onConfirm,
-  title,
-  message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
-  variant = 'danger',
-}: ConfirmDialogProps) {
-  const styles = variantStyles[variant];
+const ConfirmContext = createContext<ConfirmFn | null>(null);
+
+interface PendingState extends ConfirmOptions {
+  isOpen: boolean;
+}
+
+const INITIAL_STATE: PendingState = { isOpen: false, message: '' };
+
+export function ConfirmProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<PendingState>(INITIAL_STATE);
+  const resolverRef = useRef<((value: boolean) => void) | null>(null);
+
+  const confirm = useCallback<ConfirmFn>((options) => {
+    return new Promise<boolean>((resolve) => {
+      resolverRef.current = resolve;
+      setState({ ...options, isOpen: true });
+    });
+  }, []);
+
+  const settle = useCallback((value: boolean) => {
+    resolverRef.current?.(value);
+    resolverRef.current = null;
+    setState((prev) => ({ ...prev, isOpen: false }));
+  }, []);
+
+  const confirmTone = state.tone ?? 'default';
+  const confirmLabel = state.confirmLabel ?? 'Confirm';
+  const cancelLabel = state.cancelLabel ?? 'Cancel';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="sm">
-      <div className="flex flex-col items-center text-center py-2">
-        <div
-          className={cn(
-            'size-12 rounded-full flex items-center justify-center mb-4',
-            styles.iconBg
-          )}
-        >
-          <AlertTriangle className={cn('size-6', styles.iconColor)} />
+    <ConfirmContext.Provider value={confirm}>
+      {children}
+      <Modal
+        isOpen={state.isOpen}
+        onClose={() => settle(false)}
+        title={state.title ?? 'Are you sure?'}
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => settle(false)}
+              className="px-3 py-1.5 text-[12px] text-slate-300 hover:text-slate-100 hover:bg-white/5 rounded-sm transition-colors"
+            >
+              {cancelLabel}
+            </button>
+            <button
+              type="button"
+              autoFocus
+              onClick={() => settle(true)}
+              className={cn(
+                'px-3 py-1.5 text-[12px] rounded-sm transition-colors font-medium',
+                confirmTone === 'danger'
+                  ? 'bg-rose-500/15 text-rose-300 hover:bg-rose-500/25'
+                  : 'bg-primary/15 text-primary hover:bg-primary/25',
+              )}
+            >
+              {confirmLabel}
+            </button>
+          </>
+        }
+      >
+        <div className="text-[13px] text-slate-300 leading-relaxed">
+          {state.message}
         </div>
-        <h3 className="text-sm font-semibold text-slate-100 mb-2">{title}</h3>
-        <p className="text-[13px] text-slate-400 leading-relaxed max-w-xs">
-          {message}
-        </p>
-      </div>
-      <div className="flex items-center justify-center gap-2 mt-4">
-        <button
-          onClick={onClose}
-          className="h-8 px-4 text-[12px] font-medium text-slate-300 border border-neutral-border hover:bg-white/5 rounded-sm transition-colors"
-        >
-          {cancelLabel}
-        </button>
-        <button
-          onClick={() => {
-            onConfirm();
-            onClose();
-          }}
-          className={cn(
-            'h-8 px-4 text-[12px] font-medium text-white rounded-sm transition-colors',
-            styles.btnBg,
-            styles.btnHover
-          )}
-        >
-          {confirmLabel}
-        </button>
-      </div>
-    </Modal>
+      </Modal>
+    </ConfirmContext.Provider>
   );
+}
+
+export function useConfirm(): ConfirmFn {
+  const ctx = useContext(ConfirmContext);
+  if (!ctx) {
+    throw new Error('useConfirm must be used within a ConfirmProvider');
+  }
+  return ctx;
+}
+
+/**
+ * Returns a stable (memoized) confirm function. Mostly identical to
+ * `useConfirm` — provided so call sites can document intent.
+ */
+export function useConfirmDialog(): ConfirmFn {
+  const confirm = useConfirm();
+  return useMemo(() => confirm, [confirm]);
 }

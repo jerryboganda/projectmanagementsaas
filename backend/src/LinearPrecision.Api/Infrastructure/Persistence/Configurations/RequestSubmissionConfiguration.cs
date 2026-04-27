@@ -26,6 +26,10 @@ public sealed class RequestSubmissionConfiguration : IEntityTypeConfiguration<Re
         builder.HasIndex(rs => rs.WorkspaceId)
             .HasDatabaseName("ix_request_submissions_workspace_id");
 
+        builder.HasIndex(rs => new { rs.WorkspaceId, rs.Status, rs.CreatedAt })
+            .IsDescending(false, false, true)
+            .HasDatabaseName("ix_request_submissions_workspace_id_status_created_at");
+
         // ── Foreign keys ──
         builder.HasOne<Workspace>()
             .WithMany()

@@ -17,7 +17,7 @@ public class AIProviderEndpointTests
         _fixture = fixture;
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Put_ai_provider_should_persist_masked_provider_settings()
     {
         var client = await CreateWorkspaceScopedClientAsync();
@@ -47,7 +47,7 @@ public class AIProviderEndpointTests
         payload.GetProperty("maskedApiKey").GetString().Should().NotContain("1234567890abcdef");
     }
 
-    [Fact]
+    [DockerFact]
     public async Task Send_message_should_return_assistant_reply_when_provider_is_configured()
     {
         var client = await CreateWorkspaceScopedClientAsync();
@@ -104,6 +104,7 @@ public class AIProviderEndpointTests
     {
         var client = _fixture.CreateClient();
         var (authedClient, session) = await AuthHelper.CreateAuthenticatedClientAsync(
+            _fixture,
             client,
             email: $"ai-provider-{Guid.NewGuid():N}@test.com");
 

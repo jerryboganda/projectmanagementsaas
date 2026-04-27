@@ -159,6 +159,8 @@ export function WorkloadToolbar({
                 : "border-neutral-border bg-white/[0.02] text-slate-400 hover:bg-white/[0.05] hover:text-slate-200"
             )}
             aria-label="Workload level filters"
+            aria-haspopup="menu"
+            aria-expanded={isFilterOpen}
           >
             <SlidersHorizontal className="size-4" />
           </button>

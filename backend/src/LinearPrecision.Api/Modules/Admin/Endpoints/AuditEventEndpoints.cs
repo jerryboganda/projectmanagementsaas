@@ -11,7 +11,7 @@ public static class AuditEventEndpoints
     {
         var group = app.MapGroup("/api/v1/admin/audit-events")
             .WithTags("AuditEvents")
-            .RequireAuthorization("WorkspaceAdmin");
+            .RequireAuthorization(WorkspaceRoles.Admin);
 
         group.MapGet("/", ListAuditEvents)
             .WithName("ListAuditEvents")
@@ -45,7 +45,7 @@ public static class AuditEventEndpoints
         if (actorId.HasValue)
             query = query.Where(e => e.ActorId == actorId.Value);
 
-        var effectivePageSize = Math.Min(pageSize, 100);
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
         var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
 
         var events = await query
@@ -95,7 +95,7 @@ public static class AuditEventEndpoints
         if (auditEvent is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Audit event with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

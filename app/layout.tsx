@@ -1,18 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { SkipToContent } from '@/components/ui/skip-to-content';
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-sans',
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://linearprecision.com'),
@@ -42,9 +31,8 @@ export const metadata: Metadata = {
     images: ['/og-image.png'],
   },
   icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
-    apple: '/apple-touch-icon.png',
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
   },
   robots: {
     index: true,
@@ -71,7 +59,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} dark`}>
+    <html lang="en" className="dark">
       <body className="bg-background-dark text-slate-100 font-sans antialiased h-screen overflow-hidden flex" suppressHydrationWarning>
         <SkipToContent />
         <Providers>

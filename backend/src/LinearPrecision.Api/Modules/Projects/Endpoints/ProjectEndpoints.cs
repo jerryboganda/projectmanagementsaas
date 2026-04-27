@@ -19,52 +19,52 @@ public static class ProjectEndpoints
         group.MapGet("/", ListProjects)
             .WithName("ListProjects")
             .Produces<List<ProjectResponse>>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapPost("/", CreateProject)
             .WithName("CreateProject")
             .Produces<ProjectResponse>(StatusCodes.Status201Created)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapGet("/templates", ListTemplates)
             .WithName("ListProjectTemplates")
             .Produces<List<ProjectTemplateResponse>>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceGuest");
+            .RequireAuthorization(WorkspaceRoles.Guest);
 
         group.MapGet("/{id:guid}", GetProject)
             .WithName("GetProject")
             .Produces<ProjectDetailResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceGuest");
+            .RequireAuthorization(WorkspaceRoles.Guest);
 
         group.MapPut("/{id:guid}", UpdateProject)
             .WithName("UpdateProject")
             .Produces<ProjectResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapDelete("/{id:guid}", DeleteProject)
             .WithName("DeleteProject")
             .Produces(StatusCodes.Status204NoContent)
-            .RequireAuthorization("WorkspaceAdmin");
+            .RequireAuthorization(WorkspaceRoles.Admin);
 
         group.MapPost("/{id:guid}/favorite", ToggleFavorite)
             .WithName("ToggleProjectFavorite")
             .Produces<FavoriteToggleResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapPost("/from-template", CreateFromTemplate)
             .WithName("CreateProjectFromTemplate")
             .Produces<ProjectResponse>(StatusCodes.Status201Created)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapGet("/{id:guid}/activity", GetProjectActivity)
             .WithName("GetProjectActivity")
             .Produces<List<ProjectActivityResponse>>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceGuest");
+            .RequireAuthorization(WorkspaceRoles.Guest);
 
         group.MapGet("/{id:guid}/metrics", GetProjectMetrics)
             .WithName("GetProjectMetrics")
             .Produces<ProjectMetricsResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── GET /api/v1/projects ──
@@ -75,10 +75,13 @@ public static class ProjectEndpoints
         string? status = null,
         Guid? leadId = null,
         int pageSize = 25,
+        int page = 1,
         string sortBy = "createdAt",
         string sortOrder = "desc")
     {
         var userId = currentUser.UserId;
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
+        var offset = (int)Math.Min((long)(Math.Max(page, 1) - 1) * effectivePageSize, int.MaxValue);
         var query = db.Projects.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<ProjectStatus>(status, true, out var ps))
@@ -94,7 +97,7 @@ public static class ProjectEndpoints
             _ => sortOrder == "asc" ? query.OrderBy(p => p.CreatedAt) : query.OrderByDescending(p => p.CreatedAt)
         };
 
-        var projects = await query.Take(Math.Min(pageSize, 100))
+        var projects = await query.Skip(offset).Take(effectivePageSize)
             .Select(p => new ProjectResponse(
                 p.Id,
                 p.WorkspaceId,
@@ -140,7 +143,7 @@ public static class ProjectEndpoints
         if (await db.Projects.AnyAsync(p => p.Identifier == request.Identifier, ct))
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: $"A project with identifier '{request.Identifier}' already exists in this workspace.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -229,7 +232,7 @@ public static class ProjectEndpoints
         if (proj is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Project with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -281,7 +284,7 @@ public static class ProjectEndpoints
         if (project is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Project with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -292,7 +295,7 @@ public static class ProjectEndpoints
             if (await db.Projects.AnyAsync(p => p.Identifier == request.Identifier && p.Id != id, ct))
             {
                 return Results.Problem(
-                    title: "Conflict",
+                    title: ProblemTitles.Conflict,
                     detail: $"A project with identifier '{request.Identifier}' already exists in this workspace.",
                     statusCode: StatusCodes.Status409Conflict);
             }
@@ -372,7 +375,7 @@ public static class ProjectEndpoints
         if (project is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Project with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -399,7 +402,7 @@ public static class ProjectEndpoints
         if (!await db.Projects.AnyAsync(p => p.Id == id, ct))
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Project with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -443,7 +446,7 @@ public static class ProjectEndpoints
         if (template is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: "Project template was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -452,7 +455,7 @@ public static class ProjectEndpoints
         if (await db.Projects.AnyAsync(p => p.Identifier == request.Identifier, ct))
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: $"A project with identifier '{request.Identifier}' already exists in this workspace.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -486,7 +489,7 @@ public static class ProjectEndpoints
         if (!await db.Projects.AnyAsync(p => p.Id == id, ct))
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Project with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -495,7 +498,7 @@ public static class ProjectEndpoints
             .AsNoTracking()
             .Where(a => a.EntityType == "Project" && a.EntityId == id)
             .OrderByDescending(a => a.CreatedAt)
-            .Take(Math.Min(pageSize, 100))
+            .Take(Math.Clamp(pageSize, 1, 100))
             .Select(a => new ProjectActivityResponse(
                 a.Id,
                 a.Action,
@@ -518,36 +521,37 @@ public static class ProjectEndpoints
         if (!await db.Projects.AnyAsync(p => p.Id == id, ct))
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Project with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
 
-        var tasks = db.TaskItems.AsNoTracking().Where(t => t.ProjectId == id && !t.IsDeleted);
-
-        var taskCount = await tasks.CountAsync(ct);
-        var completedTaskCount = await tasks.CountAsync(t => t.Status == TaskItemStatus.Done, ct);
-        var openTaskCount = await tasks.CountAsync(
-            t => t.Status != TaskItemStatus.Done && t.Status != TaskItemStatus.Cancelled, ct);
-        var overdueTaskCount = await tasks.CountAsync(
-            t => t.DueDate.HasValue
-                 && t.DueDate.Value < DateOnly.FromDateTime(DateTime.UtcNow)
-                 && t.Status != TaskItemStatus.Done
-                 && t.Status != TaskItemStatus.Cancelled, ct);
-
-        // Count distinct members assigned to tasks in this project
-        var memberCount = await tasks
-            .Where(t => t.AssigneeId.HasValue)
-            .Select(t => t.AssigneeId!.Value)
-            .Distinct()
-            .CountAsync(ct);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var metrics = await db.TaskItems.AsNoTracking()
+            .Where(t => t.ProjectId == id && !t.IsDeleted)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TaskCount = g.Count(),
+                CompletedTaskCount = g.Count(t => t.Status == TaskItemStatus.Done),
+                OpenTaskCount = g.Count(t => t.Status != TaskItemStatus.Done && t.Status != TaskItemStatus.Cancelled),
+                OverdueTaskCount = g.Count(t => t.DueDate.HasValue
+                    && t.DueDate.Value < today
+                    && t.Status != TaskItemStatus.Done
+                    && t.Status != TaskItemStatus.Cancelled),
+                MemberCount = g.Where(t => t.AssigneeId.HasValue)
+                    .Select(t => t.AssigneeId!.Value)
+                    .Distinct()
+                    .Count()
+            })
+            .FirstOrDefaultAsync(ct);
 
         return Results.Ok(new ProjectMetricsResponse(
             id,
-            taskCount,
-            completedTaskCount,
-            openTaskCount,
-            overdueTaskCount,
-            memberCount));
+            metrics?.TaskCount ?? 0,
+            metrics?.CompletedTaskCount ?? 0,
+            metrics?.OpenTaskCount ?? 0,
+            metrics?.OverdueTaskCount ?? 0,
+            metrics?.MemberCount ?? 0));
     }
 }

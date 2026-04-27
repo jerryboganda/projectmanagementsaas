@@ -1,18 +1,22 @@
 using LinearPrecision.Api.Entities;
+using LinearPrecision.Api.Infrastructure.Caching;
 using LinearPrecision.Api.Infrastructure.Persistence;
 using LinearPrecision.Api.Modules.Admin.Models;
 using LinearPrecision.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace LinearPrecision.Api.Modules.Admin.Endpoints;
 
 public static class FeatureFlagEndpoints
 {
+    private static readonly TimeSpan FeatureFlagCacheTtl = TimeSpan.FromMinutes(2);
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/admin/feature-flags")
             .WithTags("FeatureFlags")
-            .RequireAuthorization("WorkspaceAdmin");
+            .RequireAuthorization(WorkspaceRoles.Admin);
 
         group.MapGet("/", ListFeatureFlags)
             .WithName("ListFeatureFlags")
@@ -37,10 +41,18 @@ public static class FeatureFlagEndpoints
     // ── GET /api/v1/admin/feature-flags ──
     private static async Task<IResult> ListFeatureFlags(
         AppDbContext db,
+        IDistributedCache cache,
         ICurrentUser currentUser,
         CancellationToken ct,
         bool? isEnabled = null)
     {
+        var cacheKey = FeatureFlagsCacheKey(isEnabled);
+        var cachedFlags = await cache.GetJsonAsync<List<FeatureFlagResponse>>(cacheKey, ct);
+        if (cachedFlags is not null)
+        {
+            return Results.Ok(cachedFlags);
+        }
+
         var query = db.FeatureFlags.AsNoTracking().AsQueryable();
 
         if (isEnabled.HasValue)
@@ -60,6 +72,8 @@ public static class FeatureFlagEndpoints
                 f.UpdatedAt))
             .ToListAsync(ct);
 
+        await cache.SetJsonAsync(cacheKey, flags, FeatureFlagCacheTtl, ct);
+
         return Results.Ok(flags);
     }
 
@@ -67,13 +81,14 @@ public static class FeatureFlagEndpoints
     private static async Task<IResult> CreateFeatureFlag(
         CreateFeatureFlagRequest request,
         AppDbContext db,
+        IDistributedCache cache,
         ICurrentUser currentUser,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Key) || request.Key.Length > 100)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "Key is required and must be 100 characters or fewer.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
@@ -85,7 +100,7 @@ public static class FeatureFlagEndpoints
         if (keyExists)
         {
             return Results.Problem(
-                title: "Conflict",
+                title: ProblemTitles.Conflict,
                 detail: $"A feature flag with key '{request.Key}' already exists.",
                 statusCode: StatusCodes.Status409Conflict);
         }
@@ -107,6 +122,7 @@ public static class FeatureFlagEndpoints
 
         db.FeatureFlags.Add(flag);
         await db.SaveChangesAsync(ct);
+        await InvalidateFeatureFlagListCacheAsync(cache, ct);
 
         var response = new FeatureFlagResponse(
             flag.Id,
@@ -127,13 +143,14 @@ public static class FeatureFlagEndpoints
         Guid id,
         UpdateFeatureFlagRequest request,
         AppDbContext db,
+        IDistributedCache cache,
         ICurrentUser currentUser,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Key) || request.Key.Length > 100)
         {
             return Results.Problem(
-                title: "Bad Request",
+                title: ProblemTitles.BadRequest,
                 detail: "Key is required and must be 100 characters or fewer.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
@@ -144,7 +161,7 @@ public static class FeatureFlagEndpoints
         if (flag is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Feature flag with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
@@ -158,7 +175,7 @@ public static class FeatureFlagEndpoints
             if (keyExists)
             {
                 return Results.Problem(
-                    title: "Conflict",
+                    title: ProblemTitles.Conflict,
                     detail: $"A feature flag with key '{request.Key}' already exists.",
                     statusCode: StatusCodes.Status409Conflict);
             }
@@ -173,6 +190,7 @@ public static class FeatureFlagEndpoints
         flag.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
+        await InvalidateFeatureFlagListCacheAsync(cache, ct);
 
         var response = new FeatureFlagResponse(
             flag.Id,
@@ -192,6 +210,7 @@ public static class FeatureFlagEndpoints
     private static async Task<IResult> DeleteFeatureFlag(
         Guid id,
         AppDbContext db,
+        IDistributedCache cache,
         ICurrentUser currentUser,
         CancellationToken ct)
     {
@@ -201,14 +220,26 @@ public static class FeatureFlagEndpoints
         if (flag is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Feature flag with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
 
         db.FeatureFlags.Remove(flag);
         await db.SaveChangesAsync(ct);
+        await InvalidateFeatureFlagListCacheAsync(cache, ct);
 
         return Results.NoContent();
     }
+
+    private static string FeatureFlagsCacheKey(bool? isEnabled)
+        => isEnabled.HasValue
+            ? $"admin:feature-flags:enabled:{isEnabled.Value}"
+            : "admin:feature-flags:all";
+
+    private static Task InvalidateFeatureFlagListCacheAsync(IDistributedCache cache, CancellationToken ct)
+        => Task.WhenAll(
+            cache.RemoveAsync(FeatureFlagsCacheKey(null), ct),
+            cache.RemoveAsync(FeatureFlagsCacheKey(true), ct),
+            cache.RemoveAsync(FeatureFlagsCacheKey(false), ct));
 }

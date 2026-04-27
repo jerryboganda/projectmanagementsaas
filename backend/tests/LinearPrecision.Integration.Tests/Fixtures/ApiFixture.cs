@@ -16,6 +16,25 @@ public class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
     private DockerContainerHandle? _postgres;
     private DockerContainerHandle? _redis;
 
+    public IEmailService EmailService { get; } = Substitute.For<IEmailService>();
+
+    public ApiFixture()
+    {
+        EmailService.SendAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        EmailService.SendTemplatedAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<object>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+    }
+
     private string PostgresConnectionString =>
         _postgres?.ConnectionString
         ?? throw new InvalidOperationException("PostgreSQL test container has not been started.");
@@ -58,7 +77,7 @@ public class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             // Replace IEmailService with a no-op stub to avoid real SMTP connections
             var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IEmailService));
             if (descriptor is not null) services.Remove(descriptor);
-            services.AddScoped(_ => Substitute.For<IEmailService>());
+            services.AddSingleton(_ => EmailService);
 
             var storageDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IStorageService));
             if (storageDescriptor is not null) services.Remove(storageDescriptor);

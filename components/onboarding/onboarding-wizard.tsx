@@ -72,20 +72,18 @@ const slideVariants = {
 /* ------------------------------------------------------------------ */
 export function OnboardingWizard() {
   const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
+  // Lazy initial state — reads localStorage once during initial mount without
+  // an effect. Guard against SSR where window is undefined.
+  const [isOpen, setIsOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem(STORAGE_KEY) !== "true";
+    } catch {
+      return false;
+    }
+  });
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
-
-  /* --- mount: check localStorage ---------------------------------- */
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(STORAGE_KEY) !== "true") {
-        setIsOpen(true);
-      }
-    } catch {
-      // SSR or storage error — ignore
-    }
-  }, []);
 
   /* --- listen for "show-onboarding" custom event ------------------ */
   useEffect(() => {
@@ -97,17 +95,6 @@ export function OnboardingWizard() {
     window.addEventListener(SHOW_EVENT, handler);
     return () => window.removeEventListener(SHOW_EVENT, handler);
   }, []);
-
-  /* --- close on Escape -------------------------------------------- */
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
 
   /* --- helpers ---------------------------------------------------- */
   const close = useCallback(() => {
@@ -137,6 +124,16 @@ export function OnboardingWizard() {
     close();
     router.push("/");
   }, [close, router]);
+
+  /* --- close on Escape (after `close` is defined) ----------------- */
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isOpen, close]);
 
   /* --- step content ----------------------------------------------- */
   const renderStep = () => {

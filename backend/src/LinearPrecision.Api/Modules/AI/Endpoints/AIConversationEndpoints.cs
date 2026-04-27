@@ -9,6 +9,9 @@ namespace LinearPrecision.Api.Modules.AI.Endpoints;
 
 public static class AIConversationEndpoints
 {
+    private const int ConversationDetailMessageLimit = 100;
+    private const int ToolInvocationLimitPerMessage = 20;
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/ai/conversations")
@@ -18,22 +21,22 @@ public static class AIConversationEndpoints
         group.MapGet("/", ListConversations)
             .WithName("ListAIConversations")
             .Produces<List<ConversationResponse>>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapPost("/", CreateConversation)
             .WithName("CreateAIConversation")
             .Produces<ConversationResponse>(StatusCodes.Status201Created)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapGet("/{id:guid}", GetConversation)
             .WithName("GetAIConversation")
             .Produces<ConversationDetailResponse>(StatusCodes.Status200OK)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapDelete("/{id:guid}", DeleteConversation)
             .WithName("DeleteAIConversation")
             .Produces(StatusCodes.Status204NoContent)
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
     }
 
     // ── GET /api/v1/ai/conversations ──
@@ -47,7 +50,7 @@ public static class AIConversationEndpoints
         var userId = currentUser.UserId
             ?? throw new UnauthorizedAccessException("User is not authenticated.");
 
-        var effectivePageSize = Math.Min(pageSize, 100);
+        var effectivePageSize = Math.Clamp(pageSize, 1, 100);
         var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
 
         var conversations = await db.AIConversations.AsNoTracking()
@@ -119,46 +122,74 @@ public static class AIConversationEndpoints
 
         var conversation = await db.AIConversations.AsNoTracking()
             .Where(c => c.Id == id && c.UserId == userId)
-            .Select(c => new ConversationDetailResponse(
+            .Select(c => new
+            {
                 c.Id,
                 c.UserId,
                 c.Title,
                 c.Model,
                 c.MessageCount,
                 c.TotalTokensUsed,
-                c.Messages
-                    .OrderBy(m => m.CreatedAt)
-                    .Select(m => new MessageResponse(
-                        m.Id,
-                        m.ConversationId,
-                        ToApiRole(m.Role),
-                        m.Content,
-                        m.TokensUsed,
-                        m.ToolInvocations
-                            .Select(t => new ToolInvocationResponse(
-                                t.Id,
-                                t.ToolName,
-                                t.Input,
-                                t.Output,
-                                t.Status,
-                                t.Duration,
-                                t.CreatedAt))
-                            .ToList(),
-                        m.CreatedAt))
-                    .ToList(),
                 c.CreatedAt,
-                c.UpdatedAt))
+                c.UpdatedAt
+            })
             .FirstOrDefaultAsync(ct);
 
         if (conversation is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Conversation with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }
 
-        return Results.Ok(conversation);
+        var messages = (await db.AIMessages.AsNoTracking()
+            .Where(m => m.ConversationId == id)
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(ConversationDetailMessageLimit)
+            .Select(m => new
+            {
+                m.Id,
+                m.ConversationId,
+                m.Role,
+                m.Content,
+                m.TokensUsed,
+                ToolInvocations = m.ToolInvocations
+                    .OrderByDescending(t => t.CreatedAt)
+                    .Take(ToolInvocationLimitPerMessage)
+                    .Select(t => new ToolInvocationResponse(
+                        t.Id,
+                        t.ToolName,
+                        t.Input,
+                        t.Output,
+                        t.Status,
+                        t.Duration,
+                        t.CreatedAt))
+                    .ToList(),
+                m.CreatedAt
+            })
+            .ToListAsync(ct))
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new MessageResponse(
+                m.Id,
+                m.ConversationId,
+                ToApiRole(m.Role),
+                m.Content,
+                m.TokensUsed,
+                m.ToolInvocations,
+                m.CreatedAt))
+            .ToList();
+
+        return Results.Ok(new ConversationDetailResponse(
+            conversation.Id,
+            conversation.UserId,
+            conversation.Title,
+            conversation.Model,
+            conversation.MessageCount,
+            conversation.TotalTokensUsed,
+            messages,
+            conversation.CreatedAt,
+            conversation.UpdatedAt));
     }
 
     // ── DELETE /api/v1/ai/conversations/{id} ──
@@ -177,7 +208,7 @@ public static class AIConversationEndpoints
         if (conversation is null)
         {
             return Results.Problem(
-                title: "Not Found",
+                title: ProblemTitles.NotFound,
                 detail: $"Conversation with id '{id}' was not found.",
                 statusCode: StatusCodes.Status404NotFound);
         }

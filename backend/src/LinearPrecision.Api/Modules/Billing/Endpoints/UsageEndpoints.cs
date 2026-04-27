@@ -7,11 +7,14 @@ namespace LinearPrecision.Api.Modules.Billing.Endpoints;
 
 public static class UsageEndpoints
 {
+    private const int DefaultPageSize = 100;
+    private const int MaxPageSize = 250;
+
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/v1/billing/usage")
             .WithTags("Usage")
-            .RequireAuthorization("WorkspaceMember");
+            .RequireAuthorization(WorkspaceRoles.Member);
 
         group.MapGet("/", ListUsageRecords)
             .WithName("ListUsageRecords")
@@ -28,7 +31,9 @@ public static class UsageEndpoints
         ICurrentUser currentUser,
         CancellationToken ct,
         string? metricName = null,
-        string? period = null)
+        string? period = null,
+        int page = 1,
+        int pageSize = DefaultPageSize)
     {
         var query = db.UsageRecords.AsNoTracking().AsQueryable();
 
@@ -38,8 +43,14 @@ public static class UsageEndpoints
         if (!string.IsNullOrEmpty(period))
             query = query.Where(u => u.Period == period);
 
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var offset = (Math.Max(page, 1) - 1) * effectivePageSize;
+
         var records = await query
             .OrderByDescending(u => u.RecordedAt)
+            .ThenBy(u => u.MetricName)
+            .Skip(offset)
+            .Take(effectivePageSize)
             .Select(u => new UsageRecordResponse(
                 u.Id,
                 u.MetricName,

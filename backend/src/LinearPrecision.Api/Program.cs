@@ -50,10 +50,10 @@ var builder = WebApplication.CreateBuilder(args);
 // ═══════════════════════════════════════════════
 // 0. STARTUP SECRETS GUARD (F-01)
 // ═══════════════════════════════════════════════
-// Outside Development we refuse to boot if any required secret is missing or
-// equal to a known-insecure development placeholder. This prevents the API
-// from silently coming up with a leaked-by-source-code key.
-if (!builder.Environment.IsDevelopment())
+// Outside Development and explicit integration Testing, refuse to boot if any
+// required secret is missing or equal to a known-insecure development placeholder.
+// This prevents the API from silently coming up with a leaked-by-source-code key.
+if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing"))
 {
     static bool IsMissingOrInsecure(string? value, params string[] insecureMarkers)
     {

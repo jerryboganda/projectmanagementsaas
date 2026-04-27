@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using FluentAssertions;
 using LinearPrecision.Api.Entities;
 using LinearPrecision.Api.Modules.Identity.Models;
@@ -127,6 +129,7 @@ public class AuthLifecycleEndpointTests
             email: $"owner-{Guid.NewGuid():N}@test.com");
 
         var inviteeEmail = $"invitee-{Guid.NewGuid():N}@test.com";
+        var invitationToken = Guid.NewGuid().ToString("N");
 
         await using var scope = _fixture.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LinearPrecision.Api.Infrastructure.Persistence.AppDbContext>();
@@ -137,7 +140,7 @@ public class AuthLifecycleEndpointTests
             Role = MembershipRole.Member,
             Status = InvitationStatus.Pending,
             InvitedBy = ownerSession.User.Id,
-            Token = Guid.NewGuid().ToString("N"),
+            Token = HashInvitationToken(invitationToken),
             ExpiresAt = DateTime.UtcNow.AddDays(7)
         };
         db.Invitations.Add(invitation);
@@ -150,7 +153,7 @@ public class AuthLifecycleEndpointTests
             email: inviteeEmail);
 
         var acceptResponse = await inviteeAuthedClient.PostAsync(
-            $"/api/v1/invitations/{invitation!.Token}/accept",
+            $"/api/v1/invitations/{invitationToken}/accept",
             content: null);
 
         acceptResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -160,5 +163,11 @@ public class AuthLifecycleEndpointTests
         acceptedSession.Should().NotBeNull();
         acceptedSession!.ActiveWorkspaceId.Should().Be(ownerSession.ActiveWorkspaceId!.Value);
         acceptedSession.Workspaces.Should().Contain(item => item.WorkspaceId == ownerSession.ActiveWorkspaceId!.Value);
+    }
+
+    private static string HashInvitationToken(string token)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexString(bytes);
     }
 }

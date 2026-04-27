@@ -45,43 +45,32 @@ export function AuthShell({
                 </p>
               </div>
 
-              <div className="mt-10 space-y-5 md:max-w-md">
-                <div className="flex gap-3">
-                  <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
-                    <ListChecks className="size-4" />
+              <ul className="mt-8 space-y-2.5 md:max-w-md">
+                <li className="flex items-center gap-3">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                    <ListChecks className="size-3.5" />
                   </span>
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">Plan the right work</p>
-                    <p className="mt-1 text-[13px] leading-6 text-slate-500">
-                      Turn requests into prioritized projects, tasks, and sprint plans your team can act on.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
-                    <Users className="size-4" />
+                  <p className="text-[13px] leading-5 text-slate-300">
+                    Plan, prioritize, and ship work in one workspace.
+                  </p>
+                </li>
+                <li className="flex items-center gap-3">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
+                    <Users className="size-3.5" />
                   </span>
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">Keep teams aligned</p>
-                    <p className="mt-1 text-[13px] leading-6 text-slate-500">
-                      Share owners, deadlines, docs, and updates from one workspace instead of chasing context.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-sky-400/20 bg-sky-400/10 text-sky-300">
-                    <ShieldCheck className="size-4" />
+                  <p className="text-[13px] leading-5 text-slate-300">
+                    Owners, deadlines, and updates aligned across teams.
+                  </p>
+                </li>
+                <li className="flex items-center gap-3">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-sky-400/20 bg-sky-400/10 text-sky-300">
+                    <ShieldCheck className="size-3.5" />
                   </span>
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">Access stays focused</p>
-                    <p className="mt-1 text-[13px] leading-6 text-slate-500">
-                      Secure sign-in and workspace access help each person return to the projects they need.
-                    </p>
-                  </div>
-                </div>
-              </div>
+                  <p className="text-[13px] leading-5 text-slate-300">
+                    Secure sign-in scoped to your workspace access.
+                  </p>
+                </li>
+              </ul>
             </section>
 
             <section className="rounded-[24px] border border-neutral-border bg-background-dark/70 p-6 md:p-8">

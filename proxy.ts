@@ -34,9 +34,8 @@ const connectSrc = buildConnectSrc().join(' ');
 
 export function proxy(request: NextRequest) {
   // F-15 — Per-request nonce CSP. Generates a 128-bit random nonce, attaches it
-  // as a request header so Server Components can read it and emit
-  // <Script nonce={nonce}>, and writes it into the response Content-Security-Policy
-  // header so only those exact inline scripts execute.
+  // to the request CSP header so Next.js can nonce generated inline scripts, and
+  // writes the same policy into the response header for the browser to enforce.
   const nonceBytes = new Uint8Array(16);
   crypto.getRandomValues(nonceBytes);
   let nonceB64 = '';
@@ -45,7 +44,7 @@ export function proxy(request: NextRequest) {
 
   const cspDirectives = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://static.cloudflareinsights.com${isDev ? " 'unsafe-eval'" : ''}`,
+    `script-src 'self' 'nonce-${nonce}' https://static.cloudflareinsights.com${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' https://picsum.photos data: blob:",
     "font-src 'self'",
@@ -61,7 +60,7 @@ export function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
-  requestHeaders.set('x-content-security-policy', cspDirectives);
+  requestHeaders.set('Content-Security-Policy', cspDirectives);
 
   const response = NextResponse.next({
     request: { headers: requestHeaders },

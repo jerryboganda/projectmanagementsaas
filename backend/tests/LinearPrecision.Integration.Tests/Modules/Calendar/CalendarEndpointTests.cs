@@ -57,7 +57,8 @@ public class CalendarEndpointTests
         var createResponse = await authedClient.PostAsJsonAsync("/api/v1/calendar", createRequest);
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var payload = await createResponse.Content.ReadFromJsonAsync<CalendarItemResponse>();
+        var payload = await createResponse.Content.ReadFromJsonAsync<CalendarItemResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         payload.Should().NotBeNull();
         payload!.Id.Should().NotBeEmpty();
 
@@ -66,7 +67,8 @@ public class CalendarEndpointTests
 
         listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var items = await listResponse.Content.ReadFromJsonAsync<List<CalendarItemResponse>>();
+        var items = await listResponse.Content.ReadFromJsonAsync<List<CalendarItemResponse>>(
+            IntegrationJsonOptions.SerializerOptions);
         items.Should().ContainSingle();
 
         var item = items!.Single();
@@ -95,7 +97,8 @@ public class CalendarEndpointTests
         response.Headers.Location.Should().NotBeNull();
         response.Headers.Location!.ToString().Should().Contain("/api/v1/calendar/");
 
-        var payload = await response.Content.ReadFromJsonAsync<CalendarItemResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<CalendarItemResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         payload.Should().NotBeNull();
         AssertCalendarItem(payload!, request, session.User.Id, session.User.FullName);
         payload!.CreatedAt.Should().NotBe(default);
@@ -118,14 +121,16 @@ public class CalendarEndpointTests
 
         var createResponse = await authedClient.PostAsJsonAsync("/api/v1/calendar", request);
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
-        var created = await createResponse.Content.ReadFromJsonAsync<CalendarItemResponse>();
+        var created = await createResponse.Content.ReadFromJsonAsync<CalendarItemResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         created.Should().NotBeNull();
 
         var detailResponse = await authedClient.GetAsync($"/api/v1/calendar/{created!.Id}");
 
         detailResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var payload = await detailResponse.Content.ReadFromJsonAsync<CalendarItemResponse>();
+        var payload = await detailResponse.Content.ReadFromJsonAsync<CalendarItemResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         payload.Should().NotBeNull();
         AssertCalendarItem(payload!, request, session.User.Id, session.User.FullName);
         payload!.Id.Should().Be(created.Id);
@@ -147,7 +152,8 @@ public class CalendarEndpointTests
 
         var createResponse = await authedClient.PostAsJsonAsync("/api/v1/calendar", createRequest);
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
-        var created = await createResponse.Content.ReadFromJsonAsync<CalendarItemResponse>();
+        var created = await createResponse.Content.ReadFromJsonAsync<CalendarItemResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         created.Should().NotBeNull();
 
         var updatedStart = new DateTime(2026, 7, 16, 10, 0, 0, DateTimeKind.Utc);
@@ -164,7 +170,8 @@ public class CalendarEndpointTests
 
         updateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var payload = await updateResponse.Content.ReadFromJsonAsync<CalendarItemResponse>();
+        var payload = await updateResponse.Content.ReadFromJsonAsync<CalendarItemResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         payload.Should().NotBeNull();
         AssertCalendarItem(payload!, updateRequest, session.User.Id, session.User.FullName);
         payload!.Id.Should().Be(created.Id);
@@ -187,7 +194,8 @@ public class CalendarEndpointTests
 
         var createResponse = await authedClient.PostAsJsonAsync("/api/v1/calendar", request);
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
-        var created = await createResponse.Content.ReadFromJsonAsync<CalendarItemResponse>();
+        var created = await createResponse.Content.ReadFromJsonAsync<CalendarItemResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         created.Should().NotBeNull();
 
         var deleteResponse = await authedClient.DeleteAsync($"/api/v1/calendar/{created!.Id}");

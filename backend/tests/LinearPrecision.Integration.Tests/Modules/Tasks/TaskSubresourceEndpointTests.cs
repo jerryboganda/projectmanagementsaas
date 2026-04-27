@@ -174,7 +174,8 @@ public class TaskSubresourceEndpointTests
 
         projectResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var project = await projectResponse.Content.ReadFromJsonAsync<ProjectResponse>();
+        var project = await projectResponse.Content.ReadFromJsonAsync<ProjectResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         project.Should().NotBeNull();
 
         var taskResponse = await client.PostAsJsonAsync(

@@ -45,7 +45,8 @@ public class GoalEndpointTests
                 null));
         createProjectResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var project = await createProjectResponse.Content.ReadFromJsonAsync<ProjectResponse>();
+        var project = await createProjectResponse.Content.ReadFromJsonAsync<ProjectResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         project.Should().NotBeNull();
 
         var createGoalResponse = await authedClient.PostAsJsonAsync(
@@ -63,7 +64,8 @@ public class GoalEndpointTests
                 null));
         createGoalResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var rootGoal = await createGoalResponse.Content.ReadFromJsonAsync<GoalResponse>();
+        var rootGoal = await createGoalResponse.Content.ReadFromJsonAsync<GoalResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         rootGoal.Should().NotBeNull();
 
         var createChildResponse = await authedClient.PostAsJsonAsync(
@@ -101,7 +103,8 @@ public class GoalEndpointTests
         var detailResponse = await authedClient.GetAsync($"/api/v1/goals/{rootGoal.Id}");
         detailResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var payload = await detailResponse.Content.ReadFromJsonAsync<GoalResponse>();
+        var payload = await detailResponse.Content.ReadFromJsonAsync<GoalResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         payload.Should().NotBeNull();
         payload!.Id.Should().Be(rootGoal.Id);
         payload.Title.Should().Be("Launch Revenue Objective");

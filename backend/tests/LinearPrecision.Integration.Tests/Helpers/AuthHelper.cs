@@ -45,7 +45,8 @@ public static class AuthHelper
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", loginRequest);
         response.EnsureSuccessStatusCode();
 
-        var sessionBody = await response.Content.ReadFromJsonAsync<AuthSessionBodyResponse>();
+        var sessionBody = await response.Content.ReadFromJsonAsync<AuthSessionBodyResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         if (sessionBody is null) throw new InvalidOperationException("Failed to deserialize auth session response");
 
         var session = new AuthSessionResponse(

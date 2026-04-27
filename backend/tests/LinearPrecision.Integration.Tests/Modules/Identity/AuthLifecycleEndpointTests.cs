@@ -96,7 +96,8 @@ public class AuthLifecycleEndpointTests
             new CreateWorkspaceRequest("Second Workspace", "Used for switching"));
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var workspace = await createResponse.Content.ReadFromJsonAsync<WorkspaceResponse>();
+        var workspace = await createResponse.Content.ReadFromJsonAsync<WorkspaceResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         workspace.Should().NotBeNull();
         workspace!.Id.Should().NotBe(session.ActiveWorkspaceId!.Value);
 
@@ -109,7 +110,8 @@ public class AuthLifecycleEndpointTests
 
         setActiveResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var updatedSession = await setActiveResponse.Content.ReadFromJsonAsync<AuthSessionResponse>();
+        var updatedSession = await setActiveResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         updatedSession.Should().NotBeNull();
         updatedSession!.ActiveWorkspaceId.Should().Be(workspace.Id);
         updatedSession.Workspaces.Should().Contain(item => item.WorkspaceId == workspace.Id);
@@ -153,7 +155,8 @@ public class AuthLifecycleEndpointTests
 
         acceptResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var acceptedSession = await acceptResponse.Content.ReadFromJsonAsync<AuthSessionResponse>();
+        var acceptedSession = await acceptResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         acceptedSession.Should().NotBeNull();
         acceptedSession!.ActiveWorkspaceId.Should().Be(ownerSession.ActiveWorkspaceId!.Value);
         acceptedSession.Workspaces.Should().Contain(item => item.WorkspaceId == ownerSession.ActiveWorkspaceId!.Value);

@@ -136,7 +136,7 @@ public class TenancyContractTests
 
         var createdProject = JsonSerializer.Deserialize<ProjectResponse>(
             createProjectBody,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            IntegrationJsonOptions.SerializerOptions);
         createdProject.Should().NotBeNull();
 
         var outsiderClient = _fixture.CreateClient();
@@ -177,7 +177,8 @@ public class TenancyContractTests
                 null));
         createProjectResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var createdProject = await createProjectResponse.Content.ReadFromJsonAsync<ProjectResponse>();
+        var createdProject = await createProjectResponse.Content.ReadFromJsonAsync<ProjectResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         createdProject.Should().NotBeNull();
         createdProject!.IsFavorited.Should().BeFalse();
 
@@ -189,7 +190,8 @@ public class TenancyContractTests
         var listResponse = await authedClient.GetAsync("/api/v1/projects/");
         listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var projects = await listResponse.Content.ReadFromJsonAsync<List<ProjectResponse>>();
+        var projects = await listResponse.Content.ReadFromJsonAsync<List<ProjectResponse>>(
+            IntegrationJsonOptions.SerializerOptions);
         projects.Should().NotBeNull();
         projects!
             .Should()
@@ -225,7 +227,8 @@ public class TenancyContractTests
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var payload = await response.Content.ReadFromJsonAsync<WorkspaceSettingsResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<WorkspaceSettingsResponse>(
+            IntegrationJsonOptions.SerializerOptions);
         payload.Should().NotBeNull();
         payload!.WorkspaceId.Should().Be(session.ActiveWorkspaceId!.Value);
         payload.Name.Should().NotBeNullOrWhiteSpace();

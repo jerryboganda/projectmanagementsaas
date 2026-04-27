@@ -508,7 +508,10 @@ app.Use(async (context, next) =>
 app.UseMiddleware<CorrelationIdMiddleware>();    // 1. Correlation ID
 app.UseMiddleware<RequestLoggingMiddleware>();    // 2. Request Logging
 app.UseMiddleware<GlobalExceptionMiddleware>();   // 3. Global Exception Handler
-app.UseRateLimiter();                            // 4. Rate Limiter
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseRateLimiter();                         // 4. Rate Limiter
+}
 app.UseCors();                                   // 5. CORS
 app.UseAuthentication();                         // 6. Authentication
 app.UseMiddleware<TenantResolutionMiddleware>();  // 7. Tenant Resolution

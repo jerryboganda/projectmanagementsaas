@@ -4,6 +4,9 @@ EXPOSE 8080
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
+COPY ["Directory.Build.props", "./"]
+COPY ["Directory.Packages.props", "./"]
+COPY ["global.json", "./"]
 COPY ["src/LinearPrecision.Api/LinearPrecision.Api.csproj", "src/LinearPrecision.Api/"]
 COPY ["src/LinearPrecision.Shared/LinearPrecision.Shared.csproj", "src/LinearPrecision.Shared/"]
 RUN dotnet restore "src/LinearPrecision.Api/LinearPrecision.Api.csproj"
